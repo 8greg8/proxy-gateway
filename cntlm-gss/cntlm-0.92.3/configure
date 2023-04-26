@@ -82,6 +82,7 @@ while [ $1 ]
 do
 	case $1 in
 		--enable-kerberos)
+			echo "Enabling kerberos"
 			printf "#define ENABLE_KERBEROS" >> $CONFIG
 			;;
 		*)

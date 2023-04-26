@@ -1,0 +1,14 @@
+version: '2'
+services:
+  cntlm:
+    image: cntlm-gss
+    container_name: cntlm-gss
+    environment:
+      - KRB5CCNAME=/tmp/krb5cc_1000
+    ports:
+      - 3128:3128
+    restart: always
+    volumes:
+      - /etc/krb5.conf:/etc/krb5.conf
+      - /etc/cntlm.conf:/etc/cntlm.conf
+      - /tmp/krb5cc_1000:/tmp/krb5cc_1000

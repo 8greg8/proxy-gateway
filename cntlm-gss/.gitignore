@@ -1,2 +1,4 @@
 .DS_Store
 cntlm.conf
+krb5.conf
+*.log
