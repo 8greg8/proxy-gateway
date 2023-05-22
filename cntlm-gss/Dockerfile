@@ -2,10 +2,14 @@
 ARG VERSION=3.17
 FROM alpine:$VERSION
 
+# Runtime arguments
+ARG BUILD_DATE
+ARG BUILD_VERSION
 
 LABEL maintainer="Gregor Koporec <15978426+8greg8@users.noreply.github.com>"
-LABEL version="2.1"
-LABEL build_date="2023-05-12"
+LABEL name="cntlm-gss"
+LABEL version=$BUILD_VERSION
+LABEL build_date=$BUILD_DATE
 
 # This is not working due to SSL errors
 #RUN apk update \
@@ -16,36 +20,48 @@ LABEL build_date="2023-05-12"
 ARG VERSION
 ARG REPO=http://dl-cdn.alpinelinux.org/alpine/v$VERSION/main
 
-RUN apk add --allow-untrusted --repository $REPO --no-cache --virtual .build-deps build-base gcc make musl-dev \
-    && apk add --allow-untrusted --repository $REPO wget \
-    && apk add --allow-untrusted --repository $REPO krb5-dev krb5 \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
+# Install tools required for the project
 # Build cntlm with kerberos enabled
+COPY corporate_root_ca.crt ciscoproxy.crt /usr/local/share/ca-certificates/
 COPY cntlm-0.92.3 /cntlm-0.92.3
-WORKDIR /cntlm-0.92.3
-RUN chmod u+x configure \
-    && ./configure --enable-kerberos \
-    && make \
-    && make install
 
-# Delete packages in .build-deps
-RUN apk del --no-cache .build-deps
+WORKDIR /cntlm-0.92.3
+
+RUN set -eux; \
+    sed -i 's/https/http/g' /etc/apk/repositories; \
+    apk update; \
+# update certificates
+    apk add --no-cache --virtual .cert ca-certificates; \
+    update-ca-certificates; \
+    apk del --no-cache .cert; \
+# build dependencies for cnltm
+    apk add --no-cache --virtual .build-deps \
+        build-base \
+        gcc \
+        make \
+        musl-dev \
+        krb5-dev; \
+    chmod u+x configure; \
+    ./configure --enable-kerberos; \
+    make; \
+    make install; \
+    make clean; \
+    apk del --no-cache .build-deps; \
+# Add runtime dependencies
+    apk add --no-cache krb5; \
+# Clean cache
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Add config files
-COPY krb5.conf /etc/krb5.conf
-COPY cntlm.conf /etc/cntlm.conf
+COPY krb5.conf cntlm.conf /etc/
 
 # Add cron job to renew ticket every 5 hours
 COPY renew_ticket.sh /renew_ticket.sh
-RUN chmod +x /renew_ticket.sh \
-    && echo "* */5 * * * /renew_ticket.sh" >> /var/spool/cron/crontabs/root
-
-# Add run script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-EXPOSE 3128
+RUN echo "* */5 * * * /renew_ticket.sh" >> /var/spool/cron/crontabs/root
 
 #ENTRYPOINT [ "/usr/sbin/cntlm", "-f", "-a", "gss", "-c", "/etc/cntlm.conf"]
-ENTRYPOINT ["/entrypoint.sh"]
+# Add run script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+EXPOSE 3128

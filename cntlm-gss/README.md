@@ -28,7 +28,7 @@ A container to function as a proxy, based on [CNTLM](http://cntlm.sourceforge.ne
 ## Build the container
 
 ```
-docker build --progress=plain -t cntlm-gss . &> build.log
+docker build --progress=plain --build-arg --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') --build-arg BUILD_VERSION=2.x -t cntlm-gss:2.x . &> build.log
 ```
 
 ## Run the container

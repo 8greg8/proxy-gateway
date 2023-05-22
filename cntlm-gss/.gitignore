@@ -2,3 +2,5 @@
 cntlm.conf
 krb5.conf
 *.log
+*.crt
+*.tar
