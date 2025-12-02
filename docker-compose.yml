@@ -1,0 +1,16 @@
+services:
+  cntlm:
+    image: cntlm-gss:2.4-amd64
+    container_name: cntlm-gss
+    # KRB5CCNAME is needed in order to get correct credential cache
+    environment:
+      - AD_USER=your-ad-user
+      - AD_PASS=/data/secrets/ad_pass
+      - KRB5CCNAME=/tmp/krb5cc_1000
+    ports:
+      - 3128:3128
+    restart: always
+    # Bind time files for time sync
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
