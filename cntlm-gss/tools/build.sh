@@ -15,7 +15,7 @@
 #
 # Usage:
 #	cd <project_root>
-#	.build.sh
+#	.tools/build.sh
 # Notes:
 #
 # ----------------------------------------------------
@@ -30,7 +30,7 @@
 DOCKER_VERSION=3.0.0        # Docker version
 BUILD_ARCH=amd64            # Options: amd64 or arm64
 TRUSTED_INTERNAL_HOST="github.com"
-INTERNAL_CERTS="corporate_root_ca.crt ciscoproxy.crt" # list of certificates to install
+#INTERNAL_CERTS="corporate_root_ca.crt ciscoproxy.crt" # folder of certificates
 # ----------------------------------------------------
 
 # Derived variables
@@ -48,7 +48,7 @@ case "$BUILD_ARCH" in
     exit 1
     ;;
 esac
-IMAGE_NAME=/cntlm-gss:$DOCKER_VERSION-$BUILD_ARCH
+IMAGE_NAME=cntlm-gss:$DOCKER_VERSION-$BUILD_ARCH
 
 # Step 0: Build docker image
 echo "Building Docker image for project $(pwd)..." &&
@@ -56,11 +56,14 @@ docker build \
     --platform $TARGET_PLATFORM \
     --network=host \
     --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-    --build-arg BUILD_VERSION=$VERSION \
+    --build-arg BUILD_VERSION=$DOCKER_VERSION \
     --build-arg BUILD_ARCH=$BUILD_ARCH \
     --build-arg TRUSTED_INTERNAL_HOST=$TRUSTED_INTERNAL_HOST \
     --build-arg INTERNAL_CERTS=$INTERNAL_CERTS \
-    -t $IMAGE_NAME -f ./docker/Dockerfile . &&
+    --build-arg HTTP_PROXY=$http_proxy --build-arg http_proxy=$http_proxy \
+    --build-arg HTTPS_PROXY=$http_proxy --build-arg https_proxy=$http_proxy \
+    --build-arg NO_PROXY="$no_proxy" --build-arg no_proxy="$no_proxy" \
+    -t $IMAGE_NAME -f ./Dockerfile . &&
 
 echo "✅ Build process completed successfully."
 
