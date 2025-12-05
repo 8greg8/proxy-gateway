@@ -28,18 +28,20 @@
 # Configurable variables
 # ----------------------------------------------------
 DOCKER_VERSION=3.0.0        # Docker version
-BUILD_ARCH=x86_64            # Options: x86_64 or aarch64
+BUILD_ARCH=amd64            # Options: amd64 or arm64
+TRUSTED_INTERNAL_HOST="github.com"
+INTERNAL_CERTS="corporate_root_ca.crt ciscoproxy.crt" # list of certificates to install
 # ----------------------------------------------------
 
 # Derived variables
 # ----------------------------------------------------
 # Convert BUILD_ARCH to platform-compatible architecture
 case "$BUILD_ARCH" in
-  aarch64)
-    TARGET_PLATFORM="linux/arm64"
+  amd64)
+    TARGET_PLATFORM="linux/amd64"
     ;;
-  x86_64)
-    TARGET_PLATFORM="linux/x86_64"
+  arm64)
+    TARGET_PLATFORM="linux/arm64"
     ;;
   *)
     echo "Unsupported BUILD_ARCH: $BUILD_ARCH"
@@ -56,6 +58,8 @@ docker build \
     --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
     --build-arg BUILD_VERSION=$VERSION \
     --build-arg BUILD_ARCH=$BUILD_ARCH \
+    --build-arg TRUSTED_INTERNAL_HOST=$TRUSTED_INTERNAL_HOST \
+    --build-arg INTERNAL_CERTS=$INTERNAL_CERTS \
     -t $IMAGE_NAME -f ./docker/Dockerfile . &&
 
 echo "✅ Build process completed successfully."
