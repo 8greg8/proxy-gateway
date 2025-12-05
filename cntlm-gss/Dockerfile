@@ -1,32 +1,56 @@
+# Copyright (c) 2025 Gregor Koporec <15978426+8greg8@users.noreply.github.com>
+
+# -------------------------------
+# Global Build Arguments
+# override with --build-arg ARGUMENT="..."
+# -------------------------------
+ARG BUILD_ARCH="amd64"
 # FROM alpine:latest returns X509: Certificate Signed by Unknown Authority
-ARG VERSION=3.17
+ARG VERSION=3.17 
+
 FROM alpine:$VERSION
 
-# Runtime arguments
+# -------------------------------
+# Stage-Specific Build Arguments
+# -------------------------------
+ARG VERSION
 ARG BUILD_DATE
 ARG BUILD_VERSION
-
-LABEL maintainer="Gregor Koporec <15978426+8greg8@users.noreply.github.com>"
-LABEL name="cntlm-gss"
-LABEL version=$BUILD_VERSION
-LABEL build_date=$BUILD_DATE
-
+ARG TRUSTED_INTERNAL_HOST
 # This is not working due to SSL errors
 #RUN apk update \
 #RUN apk add --allow-untrusted  --repository http://dl-cdn.alpinelinux.org/alpine/v3.17/main --no-cache --virtual .build-deps build-base gcc make musl-dev \
 #&& apk add --allow-untrusted  --repository http://dl-cdn.alpinelinux.org/alpine/v3.17/main wget \
 #&& apk add --allow-untrusted  --repository http://dl-cdn.alpinelinux.org/alpine/v3.17/main krb5-dev krb5 \
-
-ARG VERSION
 ARG REPO=http://dl-cdn.alpinelinux.org/alpine/v$VERSION/main
 
+# Directories
+ARG PROJECT=/cntlm
+ARG EXT_DATA=/data
+
+# -------------------------------
+# Metadata
+# -------------------------------
+LABEL maintainer="Gregor Koporec <15978426+8greg8@users.noreply.github.com>" version=$BUILD_VERSION build_date=$BUILD_DATE
+
+
+# -------------------------------
+# Certificates and source
+# -------------------------------
+# Add custom root CA for internal package sources or APIs
+COPY certs/ /usr/local/share/ca-certificates/
+COPY cntlm-0.92.3 $PROJECT
+
+# -------------------------------
+# Working Directory
+# -------------------------------
+WORKDIR $PROJECT
+
+# -------------------------------
+# System Dependencies
+# -------------------------------
 # Install tools required for the project
 # Build cntlm with kerberos enabled
-COPY corporate_root_ca.crt ciscoproxy.crt /usr/local/share/ca-certificates/
-COPY cntlm-0.92.3 /cntlm-0.92.3
-
-WORKDIR /cntlm-0.92.3
-
 RUN set -eux; \
     sed -i 's/https/http/g' /etc/apk/repositories; \
     apk update; \
@@ -43,25 +67,42 @@ RUN set -eux; \
         krb5-dev; \
     chmod u+x configure; \
     ./configure --enable-kerberos; \
-    make; \
+    make -j"$(getconf _NPROCESSORS_ONLN)"; \
     make install; \
     make clean; \
     apk del --no-cache .build-deps; \
 # Add runtime dependencies
     apk add --no-cache krb5; \
+# Create config + data dir
+    mkdir -p ${EXT_DATA}/conf ${EXT_DATA}/secrets; \
 # Clean cache
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Add config files
-COPY krb5.conf cntlm.conf /etc/
+# -------------------------------
+# Dependencies and Configs
+# -------------------------------
+# ----- Default configs (work out-of-the-box)
+COPY conf/ /etc/
+
+# Explicit environment variables
+
+# ----- Env knobs (users can point to alt locations under /data/conf)
+ENV CNTLM_CONFIG=/etc/cntlm.conf \
+    KRB5_CONFIG=/etc/krb5.conf \
+    KRB5CCNAME=/tmp/krb5cc_1000 \
+    AD_USER=aduser
+
+# Bind to this volume if custom config is needed
+VOLUME ${EXT_DATA}
+
+# -------------------------------
+# Scripts
+# -------------------------------
+COPY scripts/ /
+RUN chmod +x /docker-entrypoint.sh /renew_ticket.sh
 
 # Add cron job to renew ticket every 5 hours
-COPY renew_ticket.sh /renew_ticket.sh
 RUN echo "* */5 * * * /renew_ticket.sh" >> /var/spool/cron/crontabs/root
 
-#ENTRYPOINT [ "/usr/sbin/cntlm", "-f", "-a", "gss", "-c", "/etc/cntlm.conf"]
-# Add run script
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-ENTRYPOINT ["/docker-entrypoint.sh"]
-
 EXPOSE 3128
+ENTRYPOINT ["/docker-entrypoint.sh"]
