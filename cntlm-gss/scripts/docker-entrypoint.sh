@@ -1,15 +1,18 @@
 #!/bin/sh
+set -e
 
-# Get user and password
+# Paths
+SECRETS_DIR="/data/secrets"
 KEYTAB="/etc/$AD_USER.keytab"
 
+# Get user and password
 # Create keytab
 echo "***"
 echo "Creating keytab"
 {
     echo "addent -password -p ${AD_USER} -k 1 -e aes256-sha1"
     sleep 1
-    echo "${AD_PASS}"
+    echo "$(cat "${SECRETS_DIR}/ad_pass")"
     sleep 1
     echo "wkt ${KEYTAB}"
 } | ktutil
@@ -36,4 +39,4 @@ echo "***"
 echo "Starting cntlm-gss"
 echo "***"
 echo ""
-/usr/sbin/cntlm -v -f -a gss -c /etc/cntlm.conf
+/usr/sbin/cntlm -v -f -a gss -c "${CNTLM_CONFIG:-/etc/cntlm.conf}"
