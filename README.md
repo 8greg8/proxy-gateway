@@ -58,3 +58,14 @@ proxy = http://$<PROXY_IP>:<PROXY_PORT>
 
 ### Docker
 ...
+
+/etc/proxy.conf        ← SINGLE SOURCE OF TRUTH
+        |
+        v
+update-proxy (systemd)
+        |
+        +--> /etc/environment        (host apps)
+        +--> /etc/profile.d/proxy.sh (shells)
+        +--> docker systemd drop-in  (daemon)
+        +--> apt proxy               (apt)
+        +--> git system config
