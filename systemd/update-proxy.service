@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+[Unit]
+Description=Apply system proxy configuration from /etc/proxy.conf
+# run before docker so its drop-in is current when the daemon starts
+Before=docker.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/update-proxy
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

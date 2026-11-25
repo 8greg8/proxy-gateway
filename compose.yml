@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+name: proxy-gateway
+
+services:
+  cntlm:
+    build:
+      context: ./cntlm-gss
+      args:
+        VERSION: ${ALPINE_VERSION:-3.17}
+        APK_USE_HTTP: ${APK_USE_HTTP:-0}
+    image: proxy-gateway/cntlm-gss:local
+    container_name: cntlm-gss
+    environment:
+      - AD_USER=${AD_USER:?set AD_USER in .env (run scripts/init)}
+      - CNTLM_CONFIG=${CNTLM_CONFIG:-/data/conf/cntlm.conf}
+      - KRB5_CONFIG=${KRB5_CONFIG:-/data/conf/krb5.conf}
+      - KRB5CCNAME=${KRB5CCNAME:-/tmp/krb5cc_1000}
+    ports:
+      # host access only; other containers reach cntlm by name on the cntlm-net network
+      - "127.0.0.1:${PROXY_PORT:-3128}:3128"
+    restart: unless-stopped
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      # password file (data/secrets/ad_pass), configs (data/conf/*)
+      - ./data/secrets:/data/secrets:ro
+      - ./data/conf:/data/conf:ro
+
+networks:
+  # Containers that should use the proxy join this network (created by scripts/init).
+  default:
+    name: cntlm-net
+    external: true

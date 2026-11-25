@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+# /etc/proxy.conf - single source of truth for proxy settings (read by update-proxy)
+# One KEY=value per line. No spaces, quotes, backslashes, $ or backticks in values;
+# no line continuations (the file is parsed, never sourced). No passwords here:
+# the AD password is data/secrets/ad_pass, used only by the cntlm container.
+PROXY_ENABLED=true
+# where cntlm listens on the host (the compose file binds 127.0.0.1:PROXY_PORT)
+PROXY_HOST=127.0.0.1
+PROXY_PORT=3128
+# how containers on the cntlm-net network reach cntlm (service/container name)
+DOCKER_PROXY_HOST=cntlm
+# hosts that must not use the proxy; replace the example names with your internal hosts
+NO_PROXY=localhost,127.0.0.1,0.0.0.0,::1,git.example.com,registry.example.com,docker,dind,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.local

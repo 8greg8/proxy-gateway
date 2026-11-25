@@ -1,0 +1,31 @@
+# Per-host files are never tracked. Only *.example templates and README/.gitkeep placeholders are.
+.env
+data/*
+!data/README.md
+!data/secrets/
+data/secrets/*
+!data/secrets/README.md
+!data/conf/
+data/conf/*
+!data/conf/.gitkeep
+!data/logs/
+data/logs/*
+!data/logs/.gitkeep
+data/rendered/
+
+# credentials and certificates
+*.crt
+*.pem
+*.key
+*.keytab
+*.p12
+krb5cc_*
+ad_pass
+
+# build output
+*.tar
+*.log
+*.orig
+*.rej
+.DS_Store
+._*

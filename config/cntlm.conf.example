@@ -1,0 +1,23 @@
+#
+# Cntlm configuration for proxy-gateway. Copy to data/conf/cntlm.conf (scripts/init does this).
+# Values are parsed literally: do not quote, do not escape spaces.
+# Authentication is Kerberos (cntlm -a gss); the password is NOT stored here,
+# it lives in data/secrets/ad_pass and is read by the container entrypoint.
+#
+
+# List of parent proxies, one per line: <host>:<port>
+Proxy		proxy1.example.com:8080
+Proxy		proxy2.example.com:8080
+
+# Addresses that must not go through the parent proxies (* and ? wildcards allowed)
+NoProxy		localhost, *.internal.example.com
+
+# Port cntlm listens on inside the container. The host side is bound to 127.0.0.1 by compose.yml.
+Listen		3128
+
+# Accept connections from other containers on the cntlm-net network.
+Gateway		yes
+
+# Restrict who may use the proxy when Gateway is on (one rule per line).
+#Allow		<ip-address-or-subnet>
+#Deny		0/0
