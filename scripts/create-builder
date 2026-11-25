@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+#
+# Create a Docker buildx builder that runs on the cntlm-net network and reaches the internet through the
+# running proxy-gateway container. Use it to build any image behind the corporate proxy.
+#
+# Usage: ./scripts/create-builder [NAME]        (default NAME: proxy-gateway)
+# Then:  docker buildx build --builder NAME --allow network.host --network host \
+#          --build-arg HTTP_PROXY=http://cntlm:3128 --build-arg HTTPS_PROXY=http://cntlm:3128 .
+# (RUN steps need host networking inside the builder, which sits on cntlm-net, to resolve and reach "cntlm".)
+#
+# Needs the gateway to be running (see "Bootstrap" in the README for the very first build).
+# Reads DOCKER_PROXY_HOST, PROXY_PORT and NO_PROXY from /etc/proxy.conf; the file is parsed, never sourced.
+set -euo pipefail
+
+NAME="${1:-proxy-gateway}"
+[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "invalid builder name: $NAME" >&2; exit 2; }
+CONF="${PROXY_CONF:-/etc/proxy.conf}"
+[[ -r "$CONF" ]] || { echo "$CONF not found: run ./scripts/setup first" >&2; exit 1; }
+
+get() { sed -n "s/^$1=//p" "$CONF" | tail -1; }
+HOST="$(get DOCKER_PROXY_HOST)"; PORT="$(get PROXY_PORT)"; NOP="$(get NO_PROXY)"
+[[ "$HOST" =~ ^[A-Za-z0-9.-]+$ && "$PORT" =~ ^[0-9]+$ && "$NOP" =~ ^[A-Za-z0-9._*:/,-]+$ ]] \
+  || { echo "$CONF has missing or invalid DOCKER_PROXY_HOST, PROXY_PORT or NO_PROXY" >&2; exit 1; }
+URL="http://${HOST}:${PORT}"
+
+docker network inspect cntlm-net >/dev/null 2>&1 || { echo "network cntlm-net is missing: run ./scripts/init" >&2; exit 1; }
+docker buildx rm "$NAME" >/dev/null 2>&1 || true
+
+# --driver-opt values are CSV: a value with commas (NO_PROXY) must be wrapped in double quotes.
+docker buildx create \
+  --name "$NAME" \
+  --driver docker-container \
+  --driver-opt network=cntlm-net \
+  --buildkitd-flags '--allow-insecure-entitlement network.host' \
+  --driver-opt "env.http_proxy=${URL}" \
+  --driver-opt "env.https_proxy=${URL}" \
+  --driver-opt "env.HTTP_PROXY=${URL}" \
+  --driver-opt "env.HTTPS_PROXY=${URL}" \
+  --driver-opt "\"env.no_proxy=${NOP}\"" \
+  --driver-opt "\"env.NO_PROXY=${NOP}\"" \
+  --use >/dev/null
+
+docker buildx inspect --bootstrap "$NAME" | sed -n '1,8p'
+echo "builder '$NAME' is ready and selected (docker buildx use <other> switches back)"

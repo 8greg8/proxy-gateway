@@ -177,8 +177,18 @@ Two separate things can stop the build, and they need different fixes:
 | 3 | **Build on another network and copy the image** | On a machine or network with direct access (home, phone hotspot, a build server): `docker compose build && docker save proxy-gateway/cntlm-gss:local \| gzip > proxy-gateway-image.tgz`. Copy the file over, then on the target: `docker load < proxy-gateway-image.tgz && docker compose up -d --no-build`. The image contains no passwords, no certificates and no company names |
 | 4 | **Bootstrap through a temporary direct route** | Run the build once while connected without the corporate restriction (VPN off, guest network), where your policy allows it |
 
-After the first start, the container is the proxy: later rebuilds (`docker compose build --pull`) can use it. Set
-`BUILD_PROXY=http://localhost:3128` and `BUILD_NETWORK=host` in `.env` for that.
+After the first start, the container is the proxy and every later build can use it. For any image (this one or your
+own projects) create a BuildKit builder that sits on the `cntlm-net` network:
+
+```bash
+./scripts/create-builder                      # builder "proxy-gateway", proxies taken from /etc/proxy.conf
+docker buildx build --builder proxy-gateway --allow network.host --network host \
+  --build-arg HTTP_PROXY=http://cntlm:3128 --build-arg HTTPS_PROXY=http://cntlm:3128 .
+```
+
+`--network host` is needed because the build steps run in a nested network without Docker's name resolution; inside the
+builder container, host networking is `cntlm-net`, so `cntlm` resolves. If your network inspects TLS, the image you build
+must also trust the company root CA (this repo's Dockerfile does that with `cntlm-gss/certs/`).
 
 **Why not ship a builder image with the company certificate inside?** The certificate only solves TLS inspection, not the
 missing network path, and a company root CA must not be baked into an image that anyone can download. The local build
