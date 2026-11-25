@@ -1,0 +1,20 @@
+title = "proxy-gateway secret scan rules"
+
+[extend]
+useDefault = true
+
+# KEY=value, "- KEY=value" and "KEY: value" assignments with credential-like names.
+# Added because the default rules miss YAML list items such as "- AD_PASS=..." and "- PASSNT=...".
+[[rules]]
+id = "env-style-credential"
+description = "credential-like variable assigned a literal value"
+regex = '''(?i)\b[a-z0-9_]*(?:pass|passwd|password|passnt|passlm|passntlmv2|secret|token|api_?key|auth)[a-z0-9_]*\s*[=:]\s*['"]?([^\s'"$\{\(<][^\s'"]{7,})'''
+secretGroup = 1
+keywords = ["pass", "secret", "token", "key", "auth"]
+
+[allowlist]
+description = "upstream Cntlm sources and documentation (third-party, reviewed: variable names, no credentials)"
+paths = [
+  '''^cntlm-gss/cntlm-0\.92\.3/''',
+  '''^cntlm-gss/201211-cntlm-kerberos-authentication\.patch$''',
+]

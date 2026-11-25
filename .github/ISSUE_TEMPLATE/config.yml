@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/8greg8/proxy-gateway/discussions
+    about: Ask questions and discuss ideas here before filing an issue.
+  - name: Security vulnerability
+    url: https://github.com/8greg8/proxy-gateway/security/advisories/new
+    about: Report vulnerabilities privately. Do not open a public issue.

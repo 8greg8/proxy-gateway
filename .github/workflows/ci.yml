@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for the secret scan)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ShellCheck
+        run: shellcheck scripts/* tests/*.sh
+
+      - name: update-proxy tests
+        run: tests/test_update_proxy.sh
+
+      - name: License headers
+        run: scripts/check-license-headers.sh
+
+      - name: Compose file is valid
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+      - name: Secret scan (betterleaks, pinned release)
+        run: |
+          set -euo pipefail
+          V=1.10.1
+          curl -sSL -o bl.tgz "https://github.com/betterleaks/betterleaks/releases/download/v${V}/betterleaks_${V}_linux_x64.tar.gz"
+          echo "c174b42d7aa60caf58c0c3e555c0e4bed01fe6b0d99a412bce777b5af4ce913e  bl.tgz" | sha256sum -c -
+          tar -xzf bl.tgz betterleaks
+          ./betterleaks git . --redact --no-banner --confidence low -c .betterleaks.toml --log-opts="--all"
+
+  image:
+    runs-on: ubuntu-latest
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: |
+          cp .env.example .env
+          docker compose build
