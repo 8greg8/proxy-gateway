@@ -13,7 +13,8 @@ services:
         HTTPS_PROXY: ${BUILD_PROXY:-}
         NO_PROXY: ${BUILD_NO_PROXY:-}
       network: ${BUILD_NETWORK:-default}
-    image: proxy-gateway/cntlm-gss:local
+    # Release install: `docker compose pull`. From source: `docker compose build` builds and tags the same name.
+    image: ghcr.io/8greg8/proxy-gateway:${PROXY_GATEWAY_VERSION:-0.1.0}
     container_name: cntlm-gss
     environment:
       - AD_USER=${AD_USER:?set AD_USER in .env (run ./scripts/setup)}

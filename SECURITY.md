@@ -76,6 +76,8 @@ whether or not a fix is released. Please do not disclose the vulnerability publi
 
 ## Supply Chain
 
+Release images are built by GitHub Actions from the tagged commit, with build provenance and an SBOM attached to the image in GHCR. The release page lists `SHA256SUMS` for the image tarballs; verify them before `docker load`. Actions are pinned by commit SHA and kept current by Dependabot.
+
 If you find a vulnerability in one of our dependencies (base image, packages, Cntlm), report it to the upstream maintainer first.
 You are welcome to tell us as well.
 

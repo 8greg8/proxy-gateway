@@ -13,7 +13,10 @@ First public state of the monorepo. It combines the former `cntlm-gss` fork and 
 
 ### Added
 
-- `compose.yml` and `.env.example`: run the Cntlm container bound to `127.0.0.1`, built from `cntlm-gss/`.
+- Release install: CI publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/8greg8/proxy-gateway` on each `v*` tag, with provenance and SBOM, and attaches image tarballs and `SHA256SUMS` to the GitHub release for networks that cannot reach GHCR.
+- `scripts/create-builder`: a BuildKit builder on `cntlm-net` that builds any image through the running gateway.
+- README: two install paths (release, from source) and a Bootstrap section for the first image on a restricted network.
+- `compose.yml` and `.env.example`: run the Cntlm container bound to `127.0.0.1`, from the release image or built from `cntlm-gss/`.
 - `./scripts/update-proxy`: renders shell, `/etc/environment`, apt, Docker daemon and git proxy settings from `/etc/proxy.conf`,
   with `--dry-run`, `--check`, `--off` and `--apply-services`. Sandbox tests in `tests/`.
 - `./scripts/setup`: guided three-step setup (account and password, proxy and bypass list, root CA fetched with `openssl s_client`).

@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+name: Release
+
+# Tag vX.Y.Z  -> publish the image to GHCR and attach image tarballs and checksums to a GitHub release.
+# Manual run  -> build only (publish=false) and keep the tarballs as a workflow artifact.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to GHCR and create a release (needs a v* tag ref)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/8greg8/proxy-gateway
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write     # create the release and upload assets
+      packages: write     # push to GHCR
+      id-token: write     # build provenance
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Version
+        id: v
+        env:
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == tag ]]; then V="${GITHUB_REF_NAME#v}"; else V="0.0.0-dev"; fi
+          [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "bad version: $V" >&2; exit 1; }
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          publish=false
+          if [[ "${GITHUB_REF_TYPE}" == tag ]]; then
+            if [[ "${GITHUB_EVENT_NAME}" == push || "${PUBLISH_INPUT}" == true ]]; then publish=true; fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build one tarball per platform
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for p in amd64 arm64; do
+            docker buildx build --platform "linux/$p" --load \
+              --label "org.opencontainers.image.source=https://github.com/8greg8/proxy-gateway" \
+              --label "org.opencontainers.image.version=${{ steps.v.outputs.version }}" \
+              --label "org.opencontainers.image.licenses=GPL-2.0-or-later" \
+              -t "${IMAGE}:${{ steps.v.outputs.version }}" cntlm-gss
+            docker save "${IMAGE}:${{ steps.v.outputs.version }}" | gzip -9 > "dist/proxy-gateway-image-${{ steps.v.outputs.version }}-$p.tar.gz"
+          done
+          (cd dist && sha256sum ./*.tar.gz > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Keep the tarballs (manual runs)
+        if: steps.v.outputs.publish != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-tarballs
+          path: dist/
+
+      - name: Log in to GHCR
+        if: steps.v.outputs.publish == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the multi-arch image
+        if: steps.v.outputs.publish == 'true'
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: cntlm-gss
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.v.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/8greg8/proxy-gateway
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=GPL-2.0-or-later
+
+      - name: Create the GitHub release
+        if: steps.v.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \\[/ {f=0} f' CHANGELOG.md
+            echo
+            echo "Image: \`${IMAGE}:${VERSION}\` (multi-arch, digest \`${DIGEST}\`)."
+            echo "Offline: download the tarball for your platform and SHA256SUMS, run \`sha256sum -c --ignore-missing SHA256SUMS\`, then \`gunzip -c <tarball> | docker load\`."
+          } > notes.md
+          gh release create "v${VERSION}" dist/*.tar.gz dist/SHA256SUMS --title "v${VERSION}" --notes-file notes.md

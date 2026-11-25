@@ -114,8 +114,17 @@ One job on `ubuntu-latest`: ShellCheck, `update-proxy` tests, license headers, c
 
 ## Release Process (Maintainers)
 
-1. Move the `[Unreleased]` entries to a new version section with the date and update the compare links.
-2. Merge `develop` into `main`, tag `vX.Y.Z` and create the GitHub release from the changelog section.
+1. Move the `[Unreleased]` entries to a new version section with the date, update the compare links, and set
+   `PROXY_GATEWAY_VERSION` in `.env.example` and the default in `compose.yml`.
+2. Merge `develop` into `main` and wait for CI.
+3. Tag `vX.Y.Z` on `main` and push the tag. The `Release` workflow builds the image for `amd64` and `arm64`, pushes it to
+   `ghcr.io/8greg8/proxy-gateway` (tags `X.Y.Z` and `latest`, with provenance and SBOM), and creates the GitHub release with
+   the image tarballs, `SHA256SUMS` and the changelog section as notes.
+4. After the first release, make sure the GHCR package is public (it follows the repository when linked by the source label).
+5. Check the release: `docker pull ghcr.io/8greg8/proxy-gateway:X.Y.Z`, `sha256sum -c SHA256SUMS`, `docker load` of a tarball.
+
+To test the workflow without publishing, run `Release` manually from the Actions tab (`publish` off): it builds both
+platforms and keeps the tarballs as a workflow artifact.
 
 ## Security
 

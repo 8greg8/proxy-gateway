@@ -33,6 +33,7 @@ through the corporate proxy without a password in any of them.
 - ✅ One file, `/etc/proxy.conf`, is the single source of truth. `update-proxy` derives shell, `apt`, Docker daemon and `git` settings from it, with `--dry-run`, `--check` and `--off`.
 - ✅ Kerberos out of the box: Cntlm 0.92.3 with the GSSAPI patch, built from source in a small Alpine image.
 - ✅ `./scripts/setup` asks three groups of questions (account, proxy, root CA) and fetches and verifies the root certificate for you.
+- ✅ Prebuilt, multi-arch release images (amd64, arm64) with checksums, or build from source: your choice.
 - ✅ Safe defaults: the port is bound to `127.0.0.1`, per-host files are git-ignored, and CI scans the whole history for secrets.
 - ✅ Containers on the `cntlm-net` network reach the same proxy by name.
 
@@ -102,21 +103,58 @@ proxy-gateway/
 
 ---
 
-## Quick start
+## Installation
 
-**You need:** Linux with Docker and Docker Compose, `bash`, `openssl`, `sudo`, and your Active Directory
-account name and password.
+Two ways, like most projects: install a **release** (a prebuilt image, nothing to compile), or build **from source**.
+Both use the same `./scripts/setup` and the same configuration.
+
+**You need:** Linux with Docker and Docker Compose, `bash`, `openssl`, `sudo`, and your Active Directory account name
+and password. Replace `0.1.0` below with the release you want ([releases](https://github.com/8greg8/proxy-gateway/releases)).
+
+### Option 1: Release install (recommended)
+
+The release image is built by CI from a tagged commit for `linux/amd64` and `linux/arm64`. It contains no passwords, no
+certificates and no company names; your settings are mounted from `data/`.
+
+```bash
+git clone --depth 1 --branch v0.1.0 https://github.com/8greg8/proxy-gateway.git
+cd proxy-gateway
+./scripts/setup                  # answer steps 1 and 2; press Enter at step 3 (root CA) and at the build proxy question
+docker compose pull              # get the prebuilt image from ghcr.io
+docker compose up -d --no-build
+curl -sI -x http://localhost:3128 https://example.com | head -1     # any HTTP status line means it works
+```
+
+**Docker cannot reach `ghcr.io`?** On a network without direct access, `docker compose pull` fails for the same reason
+a build would (see [Bootstrap](#bootstrap-the-first-image-on-a-restricted-network)). Use the image file instead. Download
+`proxy-gateway-image-0.1.0-amd64.tar.gz` (or `-arm64`) and `SHA256SUMS` from the release page in your browser, then:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS
+gunzip -c proxy-gateway-image-0.1.0-amd64.tar.gz | docker load
+docker compose up -d --no-build
+```
+
+### Option 2: Install from source
+
+Build the image yourself, for example to review the code, to change it, or when no release matches.
 
 ```bash
 git clone https://github.com/8greg8/proxy-gateway.git
 cd proxy-gateway
-./scripts/setup                     # 1. answer three groups of questions (below)
-docker compose up -d --build      # 2. build and start the proxy container
-curl -sI -x http://localhost:3128 https://example.com | head -1     # 3. verify: any HTTP status line means it works
+./scripts/setup                  # all three steps; step 3 fetches your root CA if the network inspects TLS
+docker compose up -d --build     # builds the image from cntlm-gss/ and starts it
+curl -sI -x http://localhost:3128 https://example.com | head -1
 ```
 
-From now on the tools on this machine use the proxy (step 1 configured them). To use it from a container, attach the
+The build downloads Alpine and packages, so it needs internet access: see [Bootstrap](#bootstrap-the-first-image-on-a-restricted-network)
+if it fails with `DNS: transient error` or `certificate verify failed`.
+
+### After the install
+
+The tools on this machine now use the proxy (`./scripts/setup` configured them). To use it from a container, attach the
 container to the `cntlm-net` network and set `HTTPS_PROXY=http://cntlm:3128` (compose service name `cntlm`).
+To update, check out the new tag and run `docker compose pull && docker compose up -d --no-build` (or `--build`).
 
 ### What `./scripts/setup` asks
 
@@ -148,33 +186,35 @@ Notes:
 
 ---
 
-## Bootstrap: the first build needs the internet
+## Bootstrap: the first image on a restricted network
 
-proxy-gateway exists to give a machine access through the corporate proxy, but the first `docker compose build` has to
-download the Alpine base image and packages, before that proxy exists. This is the chicken-and-egg problem of every
-proxy tool on a network that blocks direct access.
+proxy-gateway exists to give a machine access through the corporate proxy, but the first image has to arrive before that
+proxy exists: `docker compose pull` needs `ghcr.io`, and `docker compose build` needs Alpine and its packages. This is the
+chicken-and-egg problem of every proxy tool on a network that blocks direct access.
 
 ```text
- docker compose build  -->  needs internet (Alpine, apk packages)
+ pull or build the image  -->  needs internet
         ^                              |
         |                              v
  proxy-gateway running  <--  needs the image   (blocked: no proxy yet)
 ```
 
-Two separate things can stop the build, and they need different fixes:
+The release install gets you furthest: the **image file** from the release page needs only a browser, which already has
+corporate access, and no build at all. Building from source has two separate blockers:
 
 | Blocker | Typical error | Fix |
 |---|---|---|
 | **TLS inspection** (the proxy re-signs HTTPS with a company root CA) | `certificate verify failed` | Step 3 of `./scripts/setup` fetches the root CA into `cntlm-gss/certs/`, and the Dockerfile trusts it during the build |
 | **No network path** (direct DNS and internet are blocked for containers) | `DNS: transient error`, `could not connect to server`, `temporary error` | One of the mitigations below. A certificate does not help here |
 
-### Mitigations, from easiest
+### Mitigations, best first
 
 | # | Mitigation | How |
 |---|---|---|
+| 0 | **Load the release image file** (best) | Download the tarball and `SHA256SUMS` from the release page in a browser, verify with `sha256sum -c --ignore-missing SHA256SUMS`, `gunzip -c <file> \| docker load`, then `docker compose up -d --no-build`. No pull, no build |
 | 1 | **Use a proxy that already works for Docker** (another running Cntlm, a colleague's gateway, a package mirror) | Answer "Proxy for building the image" in `./scripts/setup`, or set `BUILD_PROXY=http://host:port` in `.env`. If that proxy runs on this machine also `BUILD_NETWORK=host`. With a `docker-container` builder (`docker buildx ls`) use `BUILDX_BUILDER=default docker compose build` |
 | 2 | **Fix container DNS** when only name resolution fails | Docker may fall back to public DNS servers that your network blocks. Set your company DNS server in `/etc/docker/daemon.json` as `{"dns": ["<company-dns-ip>"]}`, then `sudo systemctl restart docker` |
-| 3 | **Build on another network and copy the image** | On a machine or network with direct access (home, phone hotspot, a build server): `docker compose build && docker save proxy-gateway/cntlm-gss:local \| gzip > proxy-gateway-image.tgz`. Copy the file over, then on the target: `docker load < proxy-gateway-image.tgz && docker compose up -d --no-build`. The image contains no passwords, no certificates and no company names |
+| 3 | **Build on another network and copy the image** | Only if no release matches: on a machine or network with direct access (home, phone hotspot, a build server) run `docker compose build && docker save ghcr.io/8greg8/proxy-gateway:0.1.0 \| gzip > proxy-gateway-image.tgz`. Copy the file over, then `docker load < proxy-gateway-image.tgz && docker compose up -d --no-build`. The image contains no passwords, no certificates and no company names |
 | 4 | **Bootstrap through a temporary direct route** | Run the build once while connected without the corporate restriction (VPN off, guest network), where your policy allows it |
 
 After the first start, the container is the proxy and every later build can use it. For any image (this one or your
@@ -250,7 +290,7 @@ sudo systemctl enable update-proxy
 | Symptom | Cause and fix |
 |---|---|
 | Image build: `certificate verify failed` | The network inspects TLS. Run `./scripts/setup` and answer step 3 (or copy the root certificate as `.crt` into `cntlm-gss/certs/`), then `docker compose build --no-cache` |
-| Image build: `DNS: transient error`, `could not connect to server` or `temporary error` | No network path from the build container. See [Bootstrap](#bootstrap-the-first-build-needs-the-internet) for the mitigations |
+| `docker compose pull` or the image build: `DNS: transient error`, `could not connect to server` or `temporary error` | No network path to the internet yet. See [Bootstrap](#bootstrap-the-first-image-on-a-restricted-network); the release image file avoids it |
 | Image build only works over plain HTTP | Last resort for broken TLS: `APK_USE_HTTP=1` in `.env`. Prefer fixing step 3 |
 | Container exits at start, `kinit` fails | Wrong user, realm or password. Check `.env`, `data/conf/krb5.conf`, `data/secrets/ad_pass`; `docker compose logs cntlm` shows the error. Realm names are upper case |
 | `407 Proxy Authentication Required` through the proxy | The ticket is missing or expired, or the parent proxy needs another method. Restart (`docker compose restart cntlm`), then check `Proxy` in `data/conf/cntlm.conf` |
