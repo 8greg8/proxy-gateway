@@ -55,6 +55,7 @@ valid '^[A-Za-z0-9._-]+$' "$AD_USER"
 set_kv .env AD_USER "$AD_USER"
 
 cur_realm="$(sed -n 's/^[[:space:]]*default_realm *= *//p' data/conf/krb5.conf | head -1)"
+[[ "$cur_realm" == "EXAMPLE.COM" ]] && cur_realm=""   # template placeholder, not a real answer
 ask REALM "Kerberos realm (upper case, e.g. EXAMPLE.COM)" "$cur_realm"
 REALM="$(printf '%s' "$REALM" | tr '[:lower:]' '[:upper:]')"
 valid '^[A-Z0-9.-]+$' "$REALM"
