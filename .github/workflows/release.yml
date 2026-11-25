@@ -106,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \\[/ {f=0} f' CHANGELOG.md
+            awk -v v="$VERSION" 'index($0, "## [" v "]") == 1 {f=1; next} index($0, "## [") == 1 {f=0} f' CHANGELOG.md
             echo
             echo "Image: \`${IMAGE}:${VERSION}\` (multi-arch, digest \`${DIGEST}\`)."
             echo "Provided as is, without warranty. The end user is solely responsible for its use; see the Disclaimer in the README."
