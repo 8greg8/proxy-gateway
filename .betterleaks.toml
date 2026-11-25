@@ -22,6 +22,8 @@ paths = [
   '''^cntlm-gss/rpm/''',
   # legacy compose files in the history: paths to secret files, not secrets
   '''^(cntlm-gss/)?docker-compose\.yml$''',
+  # test fixture: a dummy value written into a sandbox
+  '''^tests/test_update_proxy\.sh$''',
 ]
 regexes = [
   '''/data/secrets''',
