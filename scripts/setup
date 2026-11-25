@@ -149,7 +149,7 @@ if [[ $SKIP_CA -eq 0 ]]; then
       echo "      issuer: $(openssl x509 -in "$c" -noout -issuer | sed 's/^issuer= *//')"
       echo "      sha256: $(openssl x509 -in "$c" -noout -fingerprint -sha256 | sed 's/.*=//')"
     done
-    last="$(ls "$work"/c*.pem | tail -1)"
+    last="$(printf '%s\n' "$work"/c*.pem | tail -1)"
     # Many proxies send only the site and the intermediate certificate. Walk up to the self-signed root
     # in this machine's trust store (hash-named links, as created by update-ca-certificates).
     for _ in 1 2 3 4 5; do

@@ -8,7 +8,7 @@
 # -------------------------------
 ARG BUILD_ARCH="amd64"
 # FROM alpine:latest returns X509: Certificate Signed by Unknown Authority
-ARG VERSION=3.17 
+ARG VERSION=3.23 
 
 FROM alpine:$VERSION
 
@@ -107,7 +107,7 @@ COPY scripts/ /
 RUN chmod +x /docker-entrypoint.sh /renew_ticket.sh
 
 # Add cron job to renew ticket every 5 hours
-RUN echo "* */5 * * * /renew_ticket.sh" >> /var/spool/cron/crontabs/root
+RUN echo "0 */5 * * * /renew_ticket.sh" >> /var/spool/cron/crontabs/root
 
 EXPOSE 3128
 ENTRYPOINT ["/docker-entrypoint.sh"]

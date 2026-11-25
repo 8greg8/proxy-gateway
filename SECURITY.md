@@ -79,14 +79,34 @@ whether or not a fix is released. Please do not disclose the vulnerability publi
 If you find a vulnerability in one of our dependencies (base image, packages, Cntlm), report it to the upstream maintainer first.
 You are welcome to tell us as well.
 
-## Known Hardening Notes
+## Known Hardening Notes and Limits
 
-- The proxy port is published on `127.0.0.1` only. Publishing it on other interfaces exposes an authenticated proxy; if you do,
-  restrict clients with `Allow` and `Deny` in `cntlm.conf`.
-- The password file `data/secrets/ad_pass` must be mode `0600`. It is mounted read-only into the container.
-- The Dockerfile no longer downgrades package repositories to HTTP unless you set `APK_USE_HTTP=1`.
-- The default base image is Alpine 3.17, which no longer receives upstream security updates. Override it with
-  `ALPINE_VERSION` and test the build.
+Read these before you run the proxy on a shared machine.
+
+- **Anyone who can reach the proxy uses your identity.** Cntlm signs requests with your Kerberos ticket and does not
+  authenticate its clients. The port is published on `127.0.0.1` only, but every container on the `cntlm-net` network can
+  also use it. Attach only containers you trust, and consider `Allow`/`Deny` rules in `data/conf/cntlm.conf`.
+  Never publish the port on another interface.
+- **The password is stored in clear text** in `data/secrets/ad_pass` (mode `0600`), because the container needs it to
+  create a Kerberos keytab. It is mounted read-only and never copied into the image. Protect the host account and its backups,
+  and use a dedicated account where your organisation allows it.
+- **A trusted root CA affects everything in the image.** `scripts/setup` fetches the certificate from the network, so the
+  choice is trust-on-first-use. Compare the SHA-256 fingerprint with the one your IT department publishes before you
+  confirm. A wrong certificate lets whoever controls it intercept the image build. The certificate is written to the
+  git-ignored `cntlm-gss/certs/` and used during the build only.
+- **The container runs as root** inside its own namespace (Cntlm, `crond`, `kinit`), with `no-new-privileges` set.
+  Further hardening (`cap_drop`, `read_only`) has not been tested with Kerberos and is not enabled.
+- **Cntlm 0.92.3 is unmaintained upstream** (last release 2012) and the Kerberos patch is a community patch. Treat the
+  proxy as a convenience for a trusted workstation, not as an internet-facing service.
+- **Base image:** Alpine 3.23 by default. Alpine versions go end-of-life, so rebuild regularly with
+  `docker compose build --no-cache --pull`, or override `ALPINE_VERSION` and test the build.
+- **`update-proxy` runs as root** and edits shared files. It parses `/etc/proxy.conf` (never executes it), accepts only
+  host-name characters in the values, writes files atomically, and keeps a one-time backup
+  (`*.update-proxy.bak`) of `/etc/environment` and `/etc/gitconfig`. It removes `HTTP_PROXY`, `HTTPS_PROXY`,
+  `NO_PROXY` and `DOCKER_PROXY` lines from `/etc/environment`, including ones you wrote by hand. Keep
+  `/etc/proxy.conf` owned by root and not writable by others.
+- **The proxy URL has no credentials.** Tools get `http://localhost:3128` only.
+- The proxy port is published on `127.0.0.1` only.
 
 ## Safe Harbor
 

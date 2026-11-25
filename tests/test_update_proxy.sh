@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025 Gregor Koporec
 # Sandbox tests for scripts/update-proxy. No root needed: every path lives under $ROOT.
+# shellcheck disable=SC2016,SC1003,SC2015,SC2034
+# (the t() helper evals single-quoted test expressions on purpose)
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 UP="$HERE/../scripts/update-proxy"
@@ -40,6 +42,8 @@ run --dry-run; t "--dry-run shows a diff" 'grep -q "^+.*3129" "$ROOT/out.txt"'
 t "--dry-run changes nothing" '[[ "$(cat "$ROOT/etc/profile.d/proxy.sh")" == "$before" ]]'
 run; t "apply follows config change" 'grep -q ":3129" "$ROOT/etc/profile.d/proxy.sh"'
 
+t "first edit keeps a backup of /etc/environment" '[[ -f "$ROOT/etc/environment.update-proxy.bak" ]] && grep -q "HTTP_PROXY=http://old:1" "$ROOT/etc/environment.update-proxy.bak"'
+t "no temporary files left behind" '[[ -z "$(find "$ROOT/etc" -name "*.??????" -newer "$ROOT/etc/proxy.conf" ! -name "*.bak" 2>/dev/null | grep -E "\.[A-Za-z0-9]{6}$")" ]]'
 run --off; t "--off removes generated files" '[[ ! -e "$ROOT/etc/profile.d/proxy.sh" && ! -e "$ROOT/etc/apt/apt.conf.d/95proxy" && ! -e "$ROOT/etc/systemd/system/docker.service.d/http-proxy.conf" ]]'
 t "--off clears the environment block, keeps PATH" '! grep -q PROXY "$ROOT/etc/environment" && grep -q "^PATH=" "$ROOT/etc/environment"'
 t "--off removes git proxy, keeps other keys" '! git config --file "$ROOT/etc/gitconfig" http.proxy >/dev/null && grep -q "name = keep" "$ROOT/etc/gitconfig"'
@@ -54,6 +58,10 @@ bad_conf "rejects quotes" 'NO_PROXY="a"'
 bad_conf "rejects command substitution" 'NO_PROXY=$(touch /tmp/pwned)'
 bad_conf "rejects line continuation" 'NO_PROXY=a,\'
 bad_conf "rejects non-key line" 'just text'
+bad_conf "rejects shell metacharacters in NO_PROXY" 'NO_PROXY=a;b'
+bad_conf "rejects systemd specifiers in NO_PROXY" 'NO_PROXY=%h'
+bad_conf "rejects a path in PROXY_HOST" 'PROXY_HOST=a/b'
+bad_conf "rejects a URL in DOCKER_PROXY_HOST" 'DOCKER_PROXY_HOST=http://x'
 new_root; sed -i 's/^PROXY_PORT=.*/PROXY_PORT=99999/' "$ROOT/etc/proxy.conf"; run; t "rejects bad port" '[[ $? -eq 2 ]]'; rm -rf "$ROOT"
 new_root; sed -i '/^PROXY_HOST=/d' "$ROOT/etc/proxy.conf"; run; t "rejects missing key" '[[ $? -eq 2 ]]'; rm -rf "$ROOT"
 [[ ! -e /tmp/pwned ]] && ok "no command was executed" || bad "command was executed"

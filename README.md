@@ -175,7 +175,9 @@ One `KEY=value` per line, no spaces, quotes or `$` in values, comments on their 
 | `/etc/systemd/system/docker.service.d/http-proxy.conf` | The Docker daemon pulls images through the proxy |
 | `/etc/gitconfig` | `git` uses the proxy (`http.proxy`, `https.proxy`) |
 
-It never reads the password file and never touches `~/.docker/config.json` (your registry logins).
+It never reads the password file and never touches `~/.docker/config.json` (your registry logins). Before it first edits
+`/etc/environment` or `/etc/gitconfig` it saves a copy next to the file as `*.update-proxy.bak`. Note that it removes
+`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `DOCKER_PROXY` lines from `/etc/environment`, also ones you wrote by hand.
 
 | Command | Effect |
 |---|---|

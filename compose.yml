@@ -7,7 +7,7 @@ services:
     build:
       context: ./cntlm-gss
       args:
-        VERSION: ${ALPINE_VERSION:-3.17}
+        VERSION: ${ALPINE_VERSION:-3.23}
         APK_USE_HTTP: ${APK_USE_HTTP:-0}
         HTTP_PROXY: ${BUILD_PROXY:-}
         HTTPS_PROXY: ${BUILD_PROXY:-}
@@ -24,6 +24,9 @@ services:
       # host access only; other containers reach cntlm by name on the cntlm-net network
       - "127.0.0.1:${PROXY_PORT:-3128}:3128"
     restart: unless-stopped
+    # the container never needs to gain privileges
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro

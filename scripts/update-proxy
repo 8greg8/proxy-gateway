@@ -62,6 +62,11 @@ if [[ $ENABLED -eq 1 ]]; then
     [[ -n "${C[$k]:-}" ]] || die "$CONF: $k is required"
   done
   [[ "${C[PROXY_PORT]}" =~ ^[0-9]+$ && ${C[PROXY_PORT]} -ge 1 && ${C[PROXY_PORT]} -le 65535 ]] || die "PROXY_PORT must be 1-65535"
+  # The values end up in shell, apt, systemd and git files, so only plain host-name and list characters are allowed.
+  for k in PROXY_HOST DOCKER_PROXY_HOST; do
+    [[ "${C[$k]}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "$k must be a host name or IPv4 address"
+  done
+  [[ "${C[NO_PROXY]}" =~ ^[A-Za-z0-9._*:/,-]+$ ]] || die "NO_PROXY may only contain letters, digits and . _ * : / , -"
   PROXY_URL="http://${C[PROXY_HOST]}:${C[PROXY_PORT]}"
   DOCKER_URL="http://${C[DOCKER_PROXY_HOST]}:${C[PROXY_PORT]}"
   NOP="${C[NO_PROXY]}"
@@ -153,7 +158,14 @@ esac
 for rel in "${changed[@]}"; do
   tgt="$ROOT/$rel"
   if [[ -e "$STAGE/$rel" ]]; then
-    install -D -m 0644 "$STAGE/$rel" "$tgt"; echo "update-proxy: wrote $rel"
+    mkdir -p "$(dirname "$tgt")"
+    # keep a one-time backup of shared files that the script edits in place
+    case "$rel" in etc/environment|etc/gitconfig)
+      if [[ -f "$tgt" && ! -e "$tgt.update-proxy.bak" ]]; then cp -p "$tgt" "$tgt.update-proxy.bak"; fi ;;
+    esac
+    # write next to the target and rename, so a crash never leaves a half-written file
+    tmp="$(mktemp "$tgt.XXXXXX")"; install -m 0644 "$STAGE/$rel" "$tmp"; mv -fT "$tmp" "$tgt"
+    echo "update-proxy: wrote $rel"
   else
     rm -f "$tgt"; echo "update-proxy: removed $rel"
   fi
