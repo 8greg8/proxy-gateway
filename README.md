@@ -6,87 +6,141 @@
 A local proxy for machines and containers behind a corporate NTLM or Kerberos proxy, packaged for Docker, plus one small
 tool that keeps every proxy setting on the host in sync from a single file.
 
-## Why proxy-gateway?
+## What it does
 
-Corporate proxies that need Windows (NTLM) or Kerberos authentication do not work with most developer tools. This repo runs
-[Cntlm](http://cntlm.sourceforge.net) with Kerberos support in a container. Your tools talk to a plain local proxy
-(`http://localhost:3128`), and Cntlm authenticates upstream for them. `update-proxy` then writes the matching settings
-(shell environment, apt, the Docker daemon, git) from **one** file, `/etc/proxy.conf`, so there is exactly one place to change.
+Corporate proxies that require Windows (NTLM) or Kerberos sign-in do not work with most developer tools: `git`, `apt`,
+`pip`, `npm`, `curl` and Docker image pulls fail with `407 Proxy Authentication Required`. proxy-gateway runs
+[Cntlm](http://cntlm.sourceforge.net) with Kerberos support in a Docker container on your machine. Your tools talk to a
+plain local proxy without a password, and Cntlm signs in to the corporate proxy for them.
 
 ```text
- your tools / containers --> cntlm (this repo, Docker) --> corporate proxy --> internet
-        no password             Kerberos ticket              authenticated
+ your tools and containers  -->  proxy-gateway (Cntlm, Docker)  -->  corporate proxy  -->  internet
+   plain http://localhost:3128      Kerberos sign-in with your account      authenticated
 ```
 
-## Structure
+It consists of two independent parts:
+
+| Part | Purpose | Where |
+|---|---|---|
+| **Proxy container** | The local proxy that signs in for you | `compose.yml`, `cntlm-gss/`, `data/` |
+| **Host settings** | Points the tools on this machine at the proxy, from one file (`/etc/proxy.conf`) | `scripts/update-proxy` |
+
+## Quick start
+
+**You need:** Linux with Docker and Docker Compose, `bash`, `openssl`, `sudo`, and your directory (Active Directory)
+account name and password.
+
+```bash
+git clone https://github.com/8greg8/proxy-gateway.git
+cd proxy-gateway
+scripts/setup                     # 1. answer three groups of questions (below)
+docker compose up -d --build      # 2. build and start the proxy container
+curl -sI -x http://localhost:3128 https://example.com | head -1     # 3. verify: any HTTP status line means it works
+```
+
+From now on the tools on this machine use the proxy (step 1 configured them). To use it from a container, attach the
+container to the `cntlm-net` network and set `HTTPS_PROXY=http://cntlm:3128` (compose service name `cntlm`).
+
+### What `scripts/setup` asks
+
+| Step | Question | What the script does with it |
+|---|---|---|
+| **1. Account** | Directory user name, Kerberos realm (for example `EXAMPLE.COM`), password (typed hidden) | Writes `.env`, `data/conf/krb5.conf` (domain controllers found through DNS) and `data/secrets/ad_pass` (mode `0600`) |
+| **2. Proxy** | Corporate proxy `host:port` (several: comma separated), hosts that bypass the proxy | Writes `data/conf/cntlm.conf`, then `/etc/proxy.conf`, then applies it to this machine with `sudo scripts/update-proxy` |
+| **3. Root CA** | Any HTTPS site you reach through the proxy (empty = skip) | Fetches its certificate chain with `openssl s_client`, shows subject, issuer and SHA-256 of each certificate, and after your confirmation saves the root to `cntlm-gss/certs/<site>.crt` |
+
+Notes:
+
+- Step 3 is only needed when your network inspects TLS, which shows up as `certificate verify failed` during the image
+  build. The fetch trusts whatever the network presents the first time: compare the fingerprint with the one your IT
+  department publishes. If the proxy does not send the root, the script takes it from this machine's trust store.
+- Re-run `scripts/setup` any time. It offers the current values as defaults and asks before replacing the password.
+- The password never leaves `data/secrets/ad_pass`. It is mounted read-only into the container, which turns it into a
+  Kerberos ticket and renews it every five hours.
+
+### `scripts/setup` options
+
+| Option or variable | Effect |
+|---|---|
+| `--yes` | No prompts: use the current values, or the `SETUP_*` variables below |
+| `--skip-host` | Do not write `/etc/proxy.conf` (no `sudo` needed) |
+| `--skip-ca` | Do not fetch a certificate |
+| `SETUP_AD_USER`, `SETUP_REALM`, `SETUP_PARENT_PROXY`, `SETUP_NO_PROXY_LIST`, `SETUP_CA_HOST`, `SETUP_CA_YES=1` | Answers for unattended runs |
+| `SETUP_PASSWORD_FILE` | A file whose content becomes `data/secrets/ad_pass` |
+| `scripts/init` | Only creates the per-host files from the templates; `setup` calls it for you |
+
+## Host settings: `/etc/proxy.conf` and `update-proxy`
+
+`scripts/setup` already created and applied `/etc/proxy.conf`. This section is for changing it later. The file is the
+single source of truth for the proxy settings of this machine; `update-proxy` derives everything else from it, so you
+never edit the generated files.
+
+```ini
+# false removes all derived settings
+PROXY_ENABLED=true
+# where the proxy container listens on this host, and the port
+PROXY_HOST=127.0.0.1
+PROXY_PORT=3128
+# name under which containers on cntlm-net reach it
+DOCKER_PROXY_HOST=cntlm
+# hosts that bypass the proxy
+NO_PROXY=localhost,127.0.0.1,.example.com
+```
+
+One `KEY=value` per line, no spaces, quotes or `$` in values, comments on their own lines: the file is parsed, never executed.
+
+| `update-proxy` writes | Effect |
+|---|---|
+| `/etc/profile.d/proxy.sh` and a managed block in `/etc/environment` | `http_proxy`, `https_proxy`, `no_proxy` for shells and sessions |
+| `/etc/apt/apt.conf.d/95proxy` | `apt` uses the proxy |
+| `/etc/systemd/system/docker.service.d/http-proxy.conf` | The Docker daemon pulls images through the proxy |
+| `/etc/gitconfig` | `git` uses the proxy (`http.proxy`, `https.proxy`) |
+
+It never reads the password file and never touches `~/.docker/config.json` (your registry logins).
+
+| Command | Effect |
+|---|---|
+| `sudoedit /etc/proxy.conf && sudo scripts/update-proxy` | Change a setting and apply it |
+| `scripts/update-proxy --dry-run` | Show what would change, change nothing |
+| `scripts/update-proxy --check` | Exit 1 if the machine differs from `/etc/proxy.conf` |
+| `sudo scripts/update-proxy --off` | Remove all derived settings (for example when leaving the corporate network) |
+| `sudo scripts/update-proxy --apply-services` | Also reload systemd and restart Docker if its drop-in changed (running containers restart) |
+
+To apply the file at every boot, before Docker starts:
+
+```bash
+sudo install -m 0755 scripts/update-proxy /usr/local/sbin/update-proxy
+sudo install -m 0644 systemd/update-proxy.service /etc/systemd/system/
+sudo systemctl enable update-proxy
+```
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| Image build: `certificate verify failed` | The network inspects TLS. Run `scripts/setup` and answer step 3 (or copy the root certificate as `.crt` into `cntlm-gss/certs/`), then `docker compose build --no-cache` |
+| Image build: `could not connect to server` or `temporary error` | The build container cannot reach the internet directly. Set `BUILD_PROXY=http://host:port` in `.env`; if that proxy runs on this machine also `BUILD_NETWORK=host` |
+| Image build only works over plain HTTP | Last resort for broken TLS: `APK_USE_HTTP=1` in `.env`. Prefer fixing step 3 |
+| Container exits at start, `kinit` fails | Wrong user, realm or password. Check `.env`, `data/conf/krb5.conf`, `data/secrets/ad_pass`; `docker compose logs cntlm` shows the error. Realm names are upper case |
+| `407 Proxy Authentication Required` through the proxy | The ticket is missing or expired, or the parent proxy needs another method. Restart (`docker compose restart cntlm`), then check `Proxy` in `data/conf/cntlm.conf` |
+| Password changed | Put the new one in `data/secrets/ad_pass` (or re-run `scripts/setup`), then `docker compose restart cntlm` |
+| Port 3128 already in use | Set `PROXY_PORT` in `.env` and `PROXY_PORT` in `/etc/proxy.conf` to the same value, then `docker compose up -d` and `sudo scripts/update-proxy` |
+| Docker pulls ignore the proxy | Run `sudo scripts/update-proxy --apply-services` once so the daemon picks up its drop-in |
+| A site must not use the proxy | Add it to the bypass list in `data/conf/cntlm.conf` (`NoProxy`) and to `NO_PROXY` in `/etc/proxy.conf`, then restart and re-apply |
+| Reporting a problem | Remove credentials, host names and IP addresses from logs first, see [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+## Repository layout
 
 | Path | What | License |
 |---|---|---|
 | `compose.yml`, `.env.example` | Runs the proxy container, bound to `127.0.0.1` | Apache-2.0 |
-| `scripts/update-proxy`, `etc/proxy.conf.example`, `systemd/` | Renders host proxy settings from `/etc/proxy.conf` | Apache-2.0 |
-| `scripts/setup`, `scripts/init`, `config/*.example` | Guided setup (account, proxy, root CA) and the per-host templates | Apache-2.0 |
+| `scripts/setup`, `scripts/init`, `config/*.example` | Guided setup and the per-host templates | Apache-2.0 |
+| `scripts/update-proxy`, `etc/proxy.conf.example`, `systemd/` | Host settings from `/etc/proxy.conf` | Apache-2.0 |
 | `tests/` | Sandbox tests for `update-proxy` (no root needed) | Apache-2.0 |
 | `cntlm-gss/` | The Cntlm fork with Kerberos support and its Docker build | GPL-2.0-or-later |
 | `data/` | Per-host files (git-ignored): configs and the password file | n/a |
 
-## Quick start
-
-Requirements: Docker with Compose, `bash`, `openssl`, `sudo`, and a directory (Active Directory or Kerberos) account.
-
-```bash
-git clone https://github.com/8greg8/proxy-gateway.git && cd proxy-gateway
-scripts/setup                  # three steps, about two minutes
-docker compose up -d --build
-curl -sI -x http://localhost:3128 https://example.com | head -1     # answers through the corporate proxy
-```
-
-`scripts/setup` asks for:
-
-1. **Your account**: directory user name, Kerberos realm and password. The password is typed hidden and stored in
-   `data/secrets/ad_pass` (mode `0600`). Domain controllers are found through DNS.
-2. **Your proxy**: the corporate proxy (`host:port`) and the hosts that bypass it. It writes `data/conf/cntlm.conf`, then
-   `/etc/proxy.conf`, and applies the settings to this host with `sudo scripts/update-proxy`.
-3. **Your root CA**: if your network inspects TLS, name any HTTPS site you reach through the proxy. The script fetches its
-   certificate chain with `openssl s_client`, shows subject, issuer and SHA-256 fingerprint of each certificate, and
-   after your confirmation saves the last one to `cntlm-gss/certs/<site>.crt`. It is trust-on-first-use, so compare the
-   fingerprint with the one your IT department publishes. By hand this is
-   `openssl s_client -connect SITE:443 -showcerts </dev/null | sed -e '/-----BEGIN/,/-----END/!d'`.
-
-Re-run it any time; current values are offered as defaults. Options: `--yes` (take defaults or `SETUP_*` variables),
-`--skip-ca`, `--skip-host` (no sudo). Without a TLS-inspecting network, answer the third question with an empty line.
-
-If the image build cannot reach the internet directly, set `BUILD_PROXY` (and `BUILD_NETWORK=host` when that proxy runs
-on this machine) in `.env`. `scripts/init` alone only creates the files from the templates.
-
-### One file for all host settings
-
-```bash
-sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf   # scripts/setup does this for you
-sudoedit /etc/proxy.conf          # proxy host and port, NO_PROXY list
-sudo scripts/update-proxy --dry-run   # show what would change
-sudo scripts/update-proxy             # write the files
-scripts/update-proxy --check          # exit 1 if files differ from /etc/proxy.conf
-```
-
-It manages `/etc/profile.d/proxy.sh`, a managed block in `/etc/environment`, `/etc/apt/apt.conf.d/95proxy`, the Docker
-daemon drop-in and the system git proxy. It never restarts Docker unless you pass `--apply-services`, never reads the
-password file, and never touches `~/.docker/config.json`. `--off` removes everything it wrote. To apply
-the file at boot, install the script and the unit (the unit runs before `docker.service`):
-`sudo install -m 0755 scripts/update-proxy /usr/local/sbin/update-proxy` and
-`sudo install -m 0644 systemd/update-proxy.service /etc/systemd/system/ && sudo systemctl enable update-proxy`.
-
-The first `docker compose build` may itself need the proxy. Build once with direct access, or pass `--build-arg` proxy
-variables, then run `update-proxy`.
-
-## Development commands
-
-```bash
-tests/test_update_proxy.sh            # sandbox tests
-shellcheck scripts/* tests/*.sh
-docker compose config                 # validate the compose file
-scripts/check-license-headers.sh
-betterleaks git . -c .betterleaks.toml --confidence low   # secret scan
-```
+Developers: checks, tests and conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Acknowledgments and derivations
 

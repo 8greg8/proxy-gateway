@@ -27,17 +27,30 @@ Thank you for your interest in contributing! This document outlines the process.
 
 ## Development Workflow
 
-Before submitting a pull request, run these **in order** and fix problems before moving on:
+### Checks
 
-```bash
-shellcheck scripts/* tests/*.sh          # lint
-tests/test_update_proxy.sh                # sandbox tests, no root needed
-scripts/check-license-headers.sh          # SPDX headers on own files
-cp .env.example .env && docker compose config --quiet
-betterleaks git . --redact --confidence low -c .betterleaks.toml   # secret scan
-```
+Run these **in order** before opening a pull request and fix problems before moving on. CI runs the same checks and a build of the image.
 
-CI runs the same checks and a build of the image.
+| Order | Command | What it checks |
+|---|---|---|
+| 1 | `shellcheck scripts/* tests/*.sh` | Shell lint |
+| 2 | `tests/test_update_proxy.sh` | `update-proxy` in a sandbox (`ROOT=` directory), no root needed |
+| 3 | `scripts/check-license-headers.sh` | SPDX header on every own file outside `cntlm-gss/` |
+| 4 | `cp .env.example .env && docker compose config --quiet` | The compose file is valid |
+| 5 | `betterleaks git . --redact --confidence low -c .betterleaks.toml` | Secret scan over the whole history |
+| 6 | `docker compose build` | The image builds (needs the root CA step behind a TLS-inspecting proxy) |
+
+### Working on the scripts
+
+- `scripts/setup` and `scripts/init` only write git-ignored files. Test them in a scratch clone with
+  `SETUP_*` variables and `--yes --skip-host`, never against your real `/etc`.
+- `scripts/update-proxy` reads `ROOT` (a prefix for every system path) and `PROXY_CONF`, so the tests never touch the machine.
+- `update-proxy --dry-run` and `--check` must stay free of side effects.
+
+### Working on the container
+
+- Build context is `cntlm-gss/`; `certs/*.crt` and `conf/` are copied in. Never commit certificates.
+- Changes to upstream files under `cntlm-gss/cntlm-0.92.3/` need a "Modified by" notice and an entry in `cntlm-gss/MODIFICATIONS.md`.
 
 ## Code Style
 
