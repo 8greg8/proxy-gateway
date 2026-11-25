@@ -127,10 +127,25 @@ cat "$tmp" >data/conf/cntlm.conf; rm -f "$tmp"
 
 if [[ $SKIP_HOST -eq 0 ]]; then
   stage="$(mktemp)"
-  if [[ -r /etc/proxy.conf ]]; then cat /etc/proxy.conf >"$stage"; else cat etc/proxy.conf.example >"$stage"; fi
+  legacy=0
+  if [[ -r /etc/proxy.conf ]]; then
+    cat /etc/proxy.conf >"$stage"
+    # An /etc/proxy.conf from an older tool may use another format (exports, quotes, continuation lines).
+    # update-proxy exits with 2 when it cannot parse a file; then start from the template instead.
+    sandbox="$(mktemp -d)"
+    rc=0; ROOT="$sandbox" PROXY_CONF="$stage" ./scripts/update-proxy --check >/dev/null 2>&1 || rc=$?
+    rm -rf "$sandbox"
+    if [[ $rc -eq 2 ]]; then legacy=1; cat etc/proxy.conf.example >"$stage"; fi
+  else
+    cat etc/proxy.conf.example >"$stage"
+  fi
   set_kv "$stage" NO_PROXY "$NO_PROXY_LIST"
   if [[ $YES -eq 0 ]]; then read -r -p "Write /etc/proxy.conf and apply it to this host with sudo? [Y/n]: " r; else r=y; fi
   if [[ ! "$r" =~ ^[Nn] ]]; then
+    if [[ $legacy -eq 1 ]]; then
+      echo "The existing /etc/proxy.conf is in an older format and is replaced; the old file is kept as /etc/proxy.conf.old"
+      sudo cp -p /etc/proxy.conf /etc/proxy.conf.old
+    fi
     sudo install -m 0644 "$stage" /etc/proxy.conf
     sudo ./scripts/update-proxy
   else
