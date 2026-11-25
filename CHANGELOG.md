@@ -14,11 +14,11 @@ First public state of the monorepo. It combines the former `cntlm-gss` fork and 
 ### Added
 
 - `compose.yml` and `.env.example`: run the Cntlm container bound to `127.0.0.1`, built from `cntlm-gss/`.
-- `scripts/update-proxy`: renders shell, `/etc/environment`, apt, Docker daemon and git proxy settings from `/etc/proxy.conf`,
+- `./scripts/update-proxy`: renders shell, `/etc/environment`, apt, Docker daemon and git proxy settings from `/etc/proxy.conf`,
   with `--dry-run`, `--check`, `--off` and `--apply-services`. Sandbox tests in `tests/`.
-- `scripts/setup`: guided three-step setup (account and password, proxy and bypass list, root CA fetched with `openssl s_client`).
-- `scripts/init`: creates the per-host files from `*.example` templates and the `cntlm-net` network without overwriting anything.
-- `systemd/update-proxy.service`, `scripts/check-build-proxy.sh`, `scripts/check-license-headers.sh`.
+- `./scripts/setup`: guided three-step setup (account and password, proxy and bypass list, root CA fetched with `openssl s_client`).
+- `./scripts/init`: creates the per-host files from `*.example` templates and the `cntlm-net` network without overwriting anything.
+- `systemd/update-proxy.service`, `./scripts/check-build-proxy.sh`, `./scripts/check-license-headers.sh`.
 - Documentation and community files: README with acknowledgments and GPL compliance notes, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT
   (Contributor Covenant 3.0), NOTICE, issue and pull request templates, CI with a secret scan.
 
@@ -27,7 +27,7 @@ First public state of the monorepo. It combines the former `cntlm-gss` fork and 
 - Default Alpine base image is now 3.23 (was 3.17, which is end of life). Override with `ALPINE_VERSION`.
 - `cntlm-gss/Dockerfile`: the ticket renewal job runs every five hours (`0 */5 * * *`); before, it ran every minute during those hours.
 - `compose.yml`: `no-new-privileges` is set for the container.
-- `scripts/update-proxy`: values are validated (host names, `NO_PROXY` characters), files are written atomically, and a one-time backup of `/etc/environment` and `/etc/gitconfig` is kept.
+- `./scripts/update-proxy`: values are validated (host names, `NO_PROXY` characters), files are written atomically, and a one-time backup of `/etc/environment` and `/etc/gitconfig` is kept.
 - CI: GitHub Actions are pinned to commit SHAs; ShellCheck runs at its default severity.
 - `cntlm-gss/Dockerfile`: certificates in `certs/` are trusted before the first `apk` call, so builds behind a TLS-inspecting proxy work without the HTTP downgrade.
 - `cntlm-gss/Dockerfile`: the switch of the Alpine package repositories to HTTP is now opt-in (`APK_USE_HTTP=1`); it was always on.

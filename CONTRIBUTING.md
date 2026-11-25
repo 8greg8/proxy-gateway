@@ -13,7 +13,7 @@ Thank you for your interest in contributing! This document outlines the process.
 
 1. Fork the repository on GitHub.
 2. Clone your fork locally.
-3. Run `scripts/init` to create your local, git-ignored files.
+3. Run `./scripts/init` to create your local, git-ignored files.
 4. Create a branch from `develop`:
    - For features: `feat/<short-description>`
    - For bug fixes: `bugfix/<short-description>`
@@ -34,17 +34,17 @@ Run these **in order** before opening a pull request and fix problems before mov
 | Order | Command | What it checks |
 |---|---|---|
 | 1 | `shellcheck scripts/* tests/*.sh` | Shell lint |
-| 2 | `tests/test_update_proxy.sh` | `update-proxy` in a sandbox (`ROOT=` directory), no root needed |
-| 3 | `scripts/check-license-headers.sh` | SPDX header on every own file outside `cntlm-gss/` |
+| 2 | `./tests/test_update_proxy.sh` | `update-proxy` in a sandbox (`ROOT=` directory), no root needed |
+| 3 | `./scripts/check-license-headers.sh` | SPDX header on every own file outside `cntlm-gss/` |
 | 4 | `cp .env.example .env && docker compose config --quiet` | The compose file is valid |
 | 5 | `betterleaks git . --redact --confidence low -c .betterleaks.toml` | Secret scan over the whole history |
 | 6 | `docker compose build` | The image builds (needs the root CA step behind a TLS-inspecting proxy) |
 
 ### Working on the scripts
 
-- `scripts/setup` and `scripts/init` only write git-ignored files. Test them in a scratch clone with
+- `./scripts/setup` and `./scripts/init` only write git-ignored files. Test them in a scratch clone with
   `SETUP_*` variables and `--yes --skip-host`, never against your real `/etc`.
-- `scripts/update-proxy` reads `ROOT` (a prefix for every system path) and `PROXY_CONF`, so the tests never touch the machine.
+- `./scripts/update-proxy` reads `ROOT` (a prefix for every system path) and `PROXY_CONF`, so the tests never touch the machine.
 - `update-proxy --dry-run` and `--check` must stay free of side effects.
 
 ### Working on the container

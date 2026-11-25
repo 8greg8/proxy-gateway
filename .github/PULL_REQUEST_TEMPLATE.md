@@ -17,7 +17,7 @@ Closes #
 ## Checklist
 
 - [ ] `shellcheck scripts/* tests/*.sh` passes
-- [ ] `tests/test_update_proxy.sh` passes
+- [ ] `./tests/test_update_proxy.sh` passes
 - [ ] `docker compose config` is valid
 - [ ] Secret scan is clean (`betterleaks git . -c .betterleaks.toml --confidence low`)
 - [ ] No real credentials, hostnames, IP addresses or certificates in the diff, the description or the logs

@@ -90,7 +90,7 @@ Read these before you run the proxy on a shared machine.
 - **The password is stored in clear text** in `data/secrets/ad_pass` (mode `0600`), because the container needs it to
   create a Kerberos keytab. It is mounted read-only and never copied into the image. Protect the host account and its backups,
   and use a dedicated account where your organisation allows it.
-- **A trusted root CA affects everything in the image.** `scripts/setup` fetches the certificate from the network, so the
+- **A trusted root CA affects everything in the image.** `./scripts/setup` fetches the certificate from the network, so the
   choice is trust-on-first-use. Compare the SHA-256 fingerprint with the one your IT department publishes before you
   confirm. A wrong certificate lets whoever controls it intercept the image build. The certificate is written to the
   git-ignored `cntlm-gss/certs/` and used during the build only.

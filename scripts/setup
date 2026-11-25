@@ -3,12 +3,12 @@
 # Copyright 2025 Gregor Koporec
 #
 # One command, three steps:
-#   1. your account    directory user name and password (Kerberos realm)
+#   1. your account    Active Directory user name, password and Kerberos realm
 #   2. your proxy      parent proxy, hosts that bypass it, host settings (/etc/proxy.conf)
 #   3. your root CA    fetch the certificate chain of a TLS-inspected site (needs openssl)
 # Re-run it any time; existing answers are offered as defaults and nothing is overwritten silently.
 #
-# Usage: scripts/setup [--yes] [--skip-ca] [--skip-host]
+# Usage: ./scripts/setup [--yes] [--skip-ca] [--skip-host]
 #   --yes        take the defaults, or the values given in SETUP_* environment variables
 #   --skip-ca    do not fetch a certificate
 #   --skip-host  do not write /etc/proxy.conf (no sudo needed)
@@ -44,12 +44,12 @@ set_kv() {
 }
 valid() { [[ "$2" =~ $1 ]] || { echo "invalid value: $2" >&2; exit 2; }; }
 
-scripts/init --no-network >/dev/null
+./scripts/init --no-network >/dev/null
 
 # ---------------------------------------------------------------- 1. account
 say "Step 1/3: your account"
 cur_user="$(sed -n 's/^AD_USER=//p' .env 2>/dev/null | head -1)"; [[ "$cur_user" == "your-ad-user" ]] && cur_user=""
-ask AD_USER "Directory user name (without realm)" "$cur_user"
+ask AD_USER "Active Directory user name (without domain)" "$cur_user"
 [[ -n "$AD_USER" ]] || { echo "a user name is required" >&2; exit 2; }
 valid '^[A-Za-z0-9._-]+$' "$AD_USER"
 set_kv .env AD_USER "$AD_USER"
@@ -65,21 +65,19 @@ if [[ "$REALM" != "$cur_realm" ]]; then
       -e '/^[[:space:]]*kdc *=/d' -e '/^[[:space:]]*admin_server *=/d' \
       -e 's/^\[libdefaults\]/[libdefaults]\n\tdns_lookup_kdc = true\n\tdns_lookup_realm = true/' \
       config/krb5.conf.example >data/conf/krb5.conf
-  echo "wrote data/conf/krb5.conf (domain controllers via DNS; add 'kdc = host' lines if you need to pin them)"
 fi
 
 pw_file=data/secrets/ad_pass
 if [[ -n "${SETUP_PASSWORD_FILE:-}" ]]; then
-  install -m 0600 "$SETUP_PASSWORD_FILE" "$pw_file"; echo "password file installed (data/secrets/ad_pass)"
+  install -m 0600 "$SETUP_PASSWORD_FILE" "$pw_file"
 elif [[ -s $pw_file && $YES -eq 1 ]]; then
-  echo "keep data/secrets/ad_pass"
+  : # keep the stored password
 elif [[ $YES -eq 0 ]]; then
   if [[ -s $pw_file ]]; then read -r -p "Password already stored. Replace it? [y/N]: " r; [[ "$r" =~ ^[Yy] ]] || r=n; else r=y; fi
   if [[ "$r" =~ ^[Yy] ]]; then
-    read -rs -p "Directory password (not shown): " pw; echo
+    read -rs -p "Active Directory password (input is hidden): " pw; echo
     [[ -n "$pw" ]] || { echo "empty password" >&2; exit 2; }
     ( umask 077; printf '%s\n' "$pw" >"$pw_file" ); unset pw
-    echo "stored in data/secrets/ad_pass (mode 0600)"
   fi
 fi
 chmod 600 "$pw_file"
@@ -107,7 +105,6 @@ tmp="$(mktemp)"
   printf 'NoProxy\t\t%s\n' "${NO_PROXY_LIST//,/, }"
 } >"$tmp"
 cat "$tmp" >data/conf/cntlm.conf; rm -f "$tmp"
-echo "wrote data/conf/cntlm.conf (Proxy, NoProxy)"
 
 if [[ $SKIP_HOST -eq 0 ]]; then
   stage="$(mktemp)"
@@ -116,9 +113,9 @@ if [[ $SKIP_HOST -eq 0 ]]; then
   if [[ $YES -eq 0 ]]; then read -r -p "Write /etc/proxy.conf and apply it to this host with sudo? [Y/n]: " r; else r=y; fi
   if [[ ! "$r" =~ ^[Nn] ]]; then
     sudo install -m 0644 "$stage" /etc/proxy.conf
-    sudo scripts/update-proxy
+    sudo ./scripts/update-proxy
   else
-    echo "skipped; later: sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf && sudo scripts/update-proxy"
+    echo "skipped; later: sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf && sudo ./scripts/update-proxy"
   fi
   rm -f "$stage"
 fi
@@ -166,7 +163,6 @@ if [[ $SKIP_CA -eq 0 ]]; then
     else read -r -p "Trust the last certificate [$i] for the image build? [y/N]: " r; fi
     if [[ "$r" =~ ^[Yy] ]]; then
       install -m 0644 "$last" "cntlm-gss/certs/$CA_HOST.crt"
-      echo "wrote cntlm-gss/certs/$CA_HOST.crt (git-ignored; used only while building the image)"
     else
       echo "nothing written"
     fi

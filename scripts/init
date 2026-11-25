@@ -3,39 +3,24 @@
 # Copyright 2025 Gregor Koporec
 #
 # First-run setup: create the per-host files from the *.example templates.
-# Existing files are never overwritten. Usage: scripts/init [--no-network]
+# Existing files are never overwritten. Usage: ./scripts/init [--no-network]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 make_net=1
 [[ "${1:-}" == "--no-network" ]] && make_net=0
 
-create() { # <template> <target> <mode>
-  if [[ -e "$2" ]]; then
-    echo "keep     $2"
-  else
-    install -D -m "$3" "$1" "$2"
-    echo "created  $2"
-  fi
+create() { # <template> <target> <mode>: never overwrites an existing file
+  [[ -e "$2" ]] || install -D -m "$3" "$1" "$2"
 }
 
 create .env.example .env 0600
 create config/cntlm.conf.example data/conf/cntlm.conf 0644
 create config/krb5.conf.example data/conf/krb5.conf 0644
-
-if [[ -e data/secrets/ad_pass ]]; then
-  echo "keep     data/secrets/ad_pass"
-else
-  install -D -m 0600 /dev/null data/secrets/ad_pass
-  echo "created  data/secrets/ad_pass (EMPTY: put your directory password in it, one line)"
-fi
+[[ -e data/secrets/ad_pass ]] || install -D -m 0600 /dev/null data/secrets/ad_pass
 
 if [[ $make_net -eq 1 ]] && command -v docker >/dev/null 2>&1; then
-  if docker network inspect cntlm-net >/dev/null 2>&1; then
-    echo "keep     docker network cntlm-net"
-  else
-    docker network create cntlm-net >/dev/null && echo "created  docker network cntlm-net"
-  fi
+  docker network inspect cntlm-net >/dev/null 2>&1 || docker network create cntlm-net >/dev/null
 fi
 
 cat <<'MSG'
@@ -45,5 +30,5 @@ Next steps:
   2. Put the password into data/secrets/ad_pass (keep mode 0600).
   3. If your network uses its own root CA, copy the .crt file into cntlm-gss/certs/ before building.
   4. docker compose up -d --build
-  5. sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf, edit it, then: sudo scripts/update-proxy --dry-run
+  5. sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf, edit it, then: sudo ./scripts/update-proxy --dry-run
 MSG
