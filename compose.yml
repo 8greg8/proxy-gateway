@@ -16,7 +16,7 @@ services:
     image: proxy-gateway/cntlm-gss:local
     container_name: cntlm-gss
     environment:
-      - AD_USER=${AD_USER:?set AD_USER in .env (run scripts/init)}
+      - AD_USER=${AD_USER:?set AD_USER in .env (run ./scripts/setup)}
       - CNTLM_CONFIG=${CNTLM_CONFIG:-/data/conf/cntlm.conf}
       - KRB5_CONFIG=${KRB5_CONFIG:-/data/conf/krb5.conf}
       - KRB5CCNAME=${KRB5CCNAME:-/tmp/krb5cc_1000}
