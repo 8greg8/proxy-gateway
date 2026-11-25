@@ -17,4 +17,14 @@ description = "upstream Cntlm sources and documentation (third-party, reviewed: 
 paths = [
   '''^cntlm-gss/cntlm-0\.92\.3/''',
   '''^cntlm-gss/201211-cntlm-kerberos-authentication\.patch$''',
+  # same upstream sources at their earlier locations in the history
+  '''^cntlm-gss/[a-z_]+\.[ch]$''',
+  '''^cntlm-gss/rpm/''',
+  # legacy compose files in the history: paths to secret files, not secrets
+  '''^(cntlm-gss/)?docker-compose\.yml$''',
+]
+regexes = [
+  '''/data/secrets''',
+  '''SECRETS_DIR=''',
+  '''SECRET="s3cret-''',
 ]
