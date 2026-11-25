@@ -41,5 +41,16 @@ First public state of the monorepo. It combines the former `cntlm-gss` fork and 
 - Per-host configuration, credentials, certificates and internal host names from the repository and its history.
 - Leftover patch backups (`*.orig`) and editor files.
 
+## Before 0.1.0: history of the imported fork
+
+The `cntlm-gss/` folder keeps the history of the former `cntlm-gss` fork. Its old tags are kept with a `cntlm-gss-` prefix and are
+not releases of this project (releases are the tags that start with `v`):
+
+| Tag | Meaning |
+|---|---|
+| `cntlm-gss-0.92.3` | Baseline: Cntlm 0.92.3 with the Kerberos patch applied |
+| `cntlm-gss-v2.3` | Image version 2.3 of the former fork |
+| `cntlm-gss-v3.0.0` | Image version 3.0.0 of the former fork |
+
 [Unreleased]: https://github.com/8greg8/proxy-gateway/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/8greg8/proxy-gateway/releases/tag/v0.1.0
