@@ -68,7 +68,7 @@ and keep the machine's proxy settings consistent.
 | Step | Does |
 |---|---|
 | 1. Account | Active Directory user, Kerberos realm, hidden password prompt |
-| 2. Proxy | Corporate proxy and bypass list, then writes and applies `/etc/proxy.conf` |
+| 2. Proxy | Corporate proxy, bypass list and, if needed, a proxy for the image build, then writes and applies `/etc/proxy.conf` |
 | 3. Root CA | Fetches a certificate chain with `openssl`, shows fingerprints, saves the root after your confirmation |
 
 ### Host settings: `./scripts/update-proxy`
@@ -202,7 +202,7 @@ sudo systemctl enable update-proxy
 | Symptom | Cause and fix |
 |---|---|
 | Image build: `certificate verify failed` | The network inspects TLS. Run `./scripts/setup` and answer step 3 (or copy the root certificate as `.crt` into `cntlm-gss/certs/`), then `docker compose build --no-cache` |
-| Image build: `could not connect to server` or `temporary error` | The build container cannot reach the internet directly. Set `BUILD_PROXY=http://host:port` in `.env`; if that proxy runs on this machine also `BUILD_NETWORK=host` |
+| Image build: `DNS: transient error`, `could not connect to server` or `temporary error` | The build container has no way to the internet: the corporate network blocks direct DNS and access, and this proxy does not exist yet. Give the build a proxy that already works without a password prompt (a colleague's gateway, another running Cntlm, a mirror): answer the "Proxy for building the image" question in `./scripts/setup`, or set `BUILD_PROXY=http://host:port` in `.env` (and `BUILD_NETWORK=host` if it runs on this machine). Docker builders of type `docker-container` ignore `BUILD_NETWORK`: use `BUILDX_BUILDER=default docker compose build`. No such proxy? Build the image on a machine with direct access and copy it: `docker compose build && docker save proxy-gateway/cntlm-gss:local \| gzip > img.tgz`, then `docker load < img.tgz` on this machine and `docker compose up -d --no-build` |
 | Image build only works over plain HTTP | Last resort for broken TLS: `APK_USE_HTTP=1` in `.env`. Prefer fixing step 3 |
 | Container exits at start, `kinit` fails | Wrong user, realm or password. Check `.env`, `data/conf/krb5.conf`, `data/secrets/ad_pass`; `docker compose logs cntlm` shows the error. Realm names are upper case |
 | `407 Proxy Authentication Required` through the proxy | The ticket is missing or expired, or the parent proxy needs another method. Restart (`docker compose restart cntlm`), then check `Proxy` in `data/conf/cntlm.conf` |

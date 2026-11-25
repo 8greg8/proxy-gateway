@@ -116,6 +116,18 @@ to_cntlm() {
   local IFS=','; printf '%s' "${out[*]}" | sed 's/,/, /g'
 }
 
+# The image build runs before this proxy exists, so it may need another way out. Empty = direct access.
+cur_bp="$(sed -n 's/^BUILD_PROXY=//p' .env | head -1 || true)"
+ask BUILD_PROXY "Proxy for building the image, only if the build cannot reach the internet directly (empty = none)" "$cur_bp"
+if [[ -n "$BUILD_PROXY" ]]; then
+  valid '^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$' "$BUILD_PROXY"
+  # a proxy on this machine is only reachable from the build with host networking
+  if [[ "$BUILD_PROXY" =~ ^https?://(localhost|127\.[0-9.]+)(:|$) ]]; then set_kv .env BUILD_NETWORK host; else set_kv .env BUILD_NETWORK default; fi
+else
+  set_kv .env BUILD_NETWORK default
+fi
+set_kv .env BUILD_PROXY "$BUILD_PROXY"
+
 # cntlm.conf: replace Proxy and NoProxy lines, keep the rest
 tmp="$(mktemp)"
 {
