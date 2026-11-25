@@ -1,0 +1,19 @@
+proxy-gateway
+Copyright 2025-2026 Gregor Koporec
+
+The files outside cntlm-gss/ are licensed under the Apache License 2.0 (see LICENSE).
+The files under cntlm-gss/ are licensed under the GNU General Public License, version 2 or
+(at your option) any later version (see cntlm-gss/LICENSE and LICENSES/GPL-2.0-or-later.txt).
+
+This product includes software developed by others:
+
+- Cntlm 0.92.3, Copyright 2007-2010 David Kubicek and contributors, GPL-2.0-or-later.
+  http://cntlm.sourceforge.net (cntlm-gss/cntlm-0.92.3/COPYRIGHT lists the details).
+- Kerberos (GSSAPI) authentication patch for Cntlm, obtained from the Cntlm project on SourceForge
+  (cntlm-gss/201211-cntlm-kerberos-authentication.patch). Parts of kerberos.c derive from sample code
+  Copyright 1994 OpenVision Technologies, Inc. (permissive notice kept in the file).
+- Debian packaging files in cntlm-gss/cntlm-0.92.3/debian/, by the Debian maintainers of cntlm.
+- Docker packaging of Cntlm with the patch by Manish Kukreja, https://github.com/maksteel/cntlm-gss-docker
+  (GPL-2.0), November 2019. His commits are preserved in the history.
+
+Each of these keeps its own copyright and license. See README.md, "Acknowledgments and derivations".

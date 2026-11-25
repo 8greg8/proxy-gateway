@@ -1,4 +1,5 @@
 #
+# Modified by Gregor Koporec, 2023-04-26: build kerberos.o when ENABLE_KERBEROS is set; default 'all' target. See cntlm-gss/MODIFICATIONS.md
 # You can tweak these three variables to make things install where you
 # like, but do not touch more unless you know what you are doing. ;)
 #

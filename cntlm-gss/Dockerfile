@@ -1,4 +1,6 @@
 # Copyright (c) 2025 Gregor Koporec <15978426+8greg8@users.noreply.github.com>
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Modified by Gregor Koporec, 2023-2026: see MODIFICATIONS.md. Derived from github.com/maksteel/cntlm-gss-docker (GPL-2.0).
 
 # -------------------------------
 # Global Build Arguments

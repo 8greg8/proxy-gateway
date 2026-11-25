@@ -1,4 +1,5 @@
 #!/bin/sh
+# Modified by Gregor Koporec, 2026-11-25: 127.0.0.1 replaced by localhost. See cntlm-gss/MODIFICATIONS.md
 #
 # cntlmd: Start/stop the cntlm proxy.
 #

@@ -1,3 +1,6 @@
+> **Note:** this is the README of the original Docker packaging. For the current setup (compose file, per-host files,
+> `update-proxy`) see the [root README](../README.md). Changes against the original are listed in [MODIFICATIONS.md](MODIFICATIONS.md).
+
 # cntlm-gss-docker
 
 A container to function as a proxy, based on [CNTLM](http://cntlm.sourceforge.net). Other systemc can connect to this proxy for their web access. This container authenticates to an external proxy and can be used by others without authentication details.
