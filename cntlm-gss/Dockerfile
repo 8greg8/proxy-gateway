@@ -17,6 +17,8 @@ ARG VERSION
 ARG BUILD_DATE
 ARG BUILD_VERSION
 ARG TRUSTED_INTERNAL_HOST
+# Set to 1 to downgrade the Alpine package repositories to http (only for networks that break TLS)
+ARG APK_USE_HTTP=0
 # This is not working due to SSL errors
 #RUN apk update \
 #RUN apk add --allow-untrusted  --repository http://dl-cdn.alpinelinux.org/alpine/v3.17/main --no-cache --virtual .build-deps build-base gcc make musl-dev \
@@ -52,7 +54,7 @@ WORKDIR $PROJECT
 # Install tools required for the project
 # Build cntlm with kerberos enabled
 RUN set -eux; \
-    sed -i 's/https/http/g' /etc/apk/repositories; \
+    if [ "$APK_USE_HTTP" = "1" ]; then sed -i 's/https/http/g' /etc/apk/repositories; fi; \
     apk update; \
 # update certificates
     apk add --no-cache --virtual .cert ca-certificates; \
