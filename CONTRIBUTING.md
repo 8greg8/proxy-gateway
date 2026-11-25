@@ -126,6 +126,10 @@ One job on `ubuntu-latest`: ShellCheck, `update-proxy` tests, license headers, c
 To test the workflow without publishing, run `Release` manually from the Actions tab (`publish` off): it builds both
 platforms and keeps the tarballs as a workflow artifact.
 
+## Disclaimer
+
+The project is provided as is and the maintainer is not liable for its use, see the [Disclaimer in the README](README.md#disclaimer-and-responsibility). Contributing does not create any warranty or support obligation.
+
 ## Security
 
 Do not open public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).

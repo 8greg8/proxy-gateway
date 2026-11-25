@@ -109,6 +109,7 @@ jobs:
             awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \\[/ {f=0} f' CHANGELOG.md
             echo
             echo "Image: \`${IMAGE}:${VERSION}\` (multi-arch, digest \`${DIGEST}\`)."
+            echo "Provided as is, without warranty. The end user is solely responsible for its use; see the Disclaimer in the README."
             echo "Offline: download the tarball for your platform and SHA256SUMS, run \`sha256sum -c --ignore-missing SHA256SUMS\`, then \`gunzip -c <tarball> | docker load\`."
           } > notes.md
           gh release create "v${VERSION}" dist/*.tar.gz dist/SHA256SUMS --title "v${VERSION}" --notes-file notes.md

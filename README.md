@@ -10,7 +10,7 @@ file that keeps every proxy setting on the host in sync.
 Sign in once with your Active Directory account. `git`, `apt`, `pip`, `npm`, `curl` and Docker image pulls then work
 through the corporate proxy without a password in any of them.
 
-> **Note:** This is an independent, community-maintained packaging of [Cntlm](http://cntlm.sourceforge.net) with
+> **Note:** Use at your own risk, see [Disclaimer and responsibility](#disclaimer-and-responsibility). This is an independent, community-maintained packaging of [Cntlm](http://cntlm.sourceforge.net) with
 > Kerberos support. It is not affiliated with or endorsed by the Cntlm project or any proxy vendor.
 
 ---
@@ -365,6 +365,23 @@ Please report vulnerabilities privately, see [SECURITY.md](SECURITY.md). Never p
 addresses in issues or pull requests.
 
 ---
+
+---
+
+## Disclaimer and responsibility
+
+This project is provided **"as is"**, without warranty of any kind, express or implied, as stated in the licenses
+(Apache-2.0 sections 7 and 8; GPL-2.0 sections 11 and 12).
+
+To the extent permitted by applicable law, the author and contributors are **not liable and not responsible** for the use of
+this repository, its scripts, the container image or the documentation, or for any damage, data loss, credential
+exposure, security breach, vulnerability, service disruption, policy violation or other issue that arises from them. This
+includes issues in the third-party software it builds on (Cntlm, the Kerberos patch, Alpine Linux, Docker).
+
+**You, the end user, are solely responsible** for how you use it: for reviewing the code before you run scripts with
+`sudo` or give the container your password, for securing your systems, accounts and backups, for checking that running a
+proxy gateway and storing credentials this way is permitted by your organisation's policies and by applicable law, and for
+keeping the software and the base image up to date. Nothing here is legal, security or compliance advice.
 
 ## License
 

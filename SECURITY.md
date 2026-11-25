@@ -110,6 +110,24 @@ Read these before you run the proxy on a shared machine.
 - **The proxy URL has no credentials.** Tools get `http://localhost:3128` only.
 - The proxy port is published on `127.0.0.1` only.
 
+## Disclaimer and Responsibility
+
+This project is provided **"as is"**, without warranty of any kind, express or implied, as stated in the licenses
+(Apache-2.0 sections 7 and 8; GPL-2.0 sections 11 and 12).
+
+To the extent permitted by applicable law, the author and contributors are **not liable and not responsible** for the use of
+this repository, its scripts, the container image or the documentation, or for any damage, data loss, credential
+exposure, security breach, vulnerability, service disruption, policy violation or other issue that arises from them. This
+includes issues in the third-party software it builds on (Cntlm, the Kerberos patch, Alpine Linux, Docker).
+
+**You, the end user, are solely responsible** for how you use it: for reviewing the code before you run scripts with
+`sudo` or give the container your password, for securing your systems, accounts and backups, for checking that running a
+proxy gateway and storing credentials this way is permitted by your organisation's policies and by applicable law, and for
+keeping the software and the base image up to date. Nothing here is legal, security or compliance advice.
+
+Security reports are handled on a best-effort basis by a volunteer. The response times above are targets, not guarantees, and
+receiving or acting on a report creates no obligation or liability beyond what the licenses state.
+
 ## Safe Harbor
 
 We consider security research conducted in accordance with this policy to be authorised. We will not initiate legal action against researchers who:

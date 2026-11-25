@@ -217,6 +217,7 @@ if [[ $SKIP_CA -eq 0 ]]; then
 fi
 
 say "Done"
+echo "Use at your own risk: see the Disclaimer in README.md. You are responsible for your credentials and your use."
 echo "Start it (release image):   docker compose pull && docker compose up -d --no-build"
 echo "Start it (from source):     docker compose up -d --build"
 echo "Check it:   curl -sI -x http://localhost:$(sed -n 's/^PROXY_PORT=//p' .env | head -1) https://example.com | head -1"
