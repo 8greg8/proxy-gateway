@@ -100,6 +100,44 @@ proxy-gateway/
 - **Tooling:** `bash`, `openssl`, `systemd`
 - **Quality:** ShellCheck, sandbox tests, betterleaks secret scan, GitHub Actions
 
+## Bootstrap: the first build needs the internet
+
+proxy-gateway exists to give a machine access through the corporate proxy, but the first `docker compose build` has to
+download the Alpine base image and packages, before that proxy exists. This is the chicken-and-egg problem of every
+proxy tool on a network that blocks direct access.
+
+```text
+ docker compose build  -->  needs internet (Alpine, apk packages)
+        ^                              |
+        |                              v
+ proxy-gateway running  <--  needs the image   (blocked: no proxy yet)
+```
+
+Two separate things can stop the build, and they need different fixes:
+
+| Blocker | Typical error | Fix |
+|---|---|---|
+| **TLS inspection** (the proxy re-signs HTTPS with a company root CA) | `certificate verify failed` | Step 3 of `./scripts/setup` fetches the root CA into `cntlm-gss/certs/`, and the Dockerfile trusts it during the build |
+| **No network path** (direct DNS and internet are blocked for containers) | `DNS: transient error`, `could not connect to server`, `temporary error` | One of the mitigations below. A certificate does not help here |
+
+### Mitigations, from easiest
+
+| # | Mitigation | How |
+|---|---|---|
+| 1 | **Use a proxy that already works for Docker** (another running Cntlm, a colleague's gateway, a package mirror) | Answer "Proxy for building the image" in `./scripts/setup`, or set `BUILD_PROXY=http://host:port` in `.env`. If that proxy runs on this machine also `BUILD_NETWORK=host`. With a `docker-container` builder (`docker buildx ls`) use `BUILDX_BUILDER=default docker compose build` |
+| 2 | **Fix container DNS** when only name resolution fails | Docker may fall back to public DNS servers that your network blocks. Set your company DNS server in `/etc/docker/daemon.json` as `{"dns": ["<company-dns-ip>"]}`, then `sudo systemctl restart docker` |
+| 3 | **Build on another network and copy the image** | On a machine or network with direct access (home, phone hotspot, a build server): `docker compose build && docker save proxy-gateway/cntlm-gss:local \| gzip > proxy-gateway-image.tgz`. Copy the file over, then on the target: `docker load < proxy-gateway-image.tgz && docker compose up -d --no-build`. The image contains no passwords, no certificates and no company names |
+| 4 | **Bootstrap through a temporary direct route** | Run the build once while connected without the corporate restriction (VPN off, guest network), where your policy allows it |
+
+After the first start, the container is the proxy: later rebuilds (`docker compose build --pull`) can use it. Set
+`BUILD_PROXY=http://localhost:3128` and `BUILD_NETWORK=host` in `.env` for that.
+
+**Why not ship a builder image with the company certificate inside?** The certificate only solves TLS inspection, not the
+missing network path, and a company root CA must not be baked into an image that anyone can download. The local build
+already includes your certificate from `cntlm-gss/certs/` (git-ignored), and the image you build stays on your machine.
+
+---
+
 ---
 
 ## Quick start
@@ -202,7 +240,7 @@ sudo systemctl enable update-proxy
 | Symptom | Cause and fix |
 |---|---|
 | Image build: `certificate verify failed` | The network inspects TLS. Run `./scripts/setup` and answer step 3 (or copy the root certificate as `.crt` into `cntlm-gss/certs/`), then `docker compose build --no-cache` |
-| Image build: `DNS: transient error`, `could not connect to server` or `temporary error` | The build container has no way to the internet: the corporate network blocks direct DNS and access, and this proxy does not exist yet. Give the build a proxy that already works without a password prompt (a colleague's gateway, another running Cntlm, a mirror): answer the "Proxy for building the image" question in `./scripts/setup`, or set `BUILD_PROXY=http://host:port` in `.env` (and `BUILD_NETWORK=host` if it runs on this machine). Docker builders of type `docker-container` ignore `BUILD_NETWORK`: use `BUILDX_BUILDER=default docker compose build`. No such proxy? Build the image on a machine with direct access and copy it: `docker compose build && docker save proxy-gateway/cntlm-gss:local \| gzip > img.tgz`, then `docker load < img.tgz` on this machine and `docker compose up -d --no-build` |
+| Image build: `DNS: transient error`, `could not connect to server` or `temporary error` | No network path from the build container. See [Bootstrap](#bootstrap-the-first-build-needs-the-internet) for the mitigations |
 | Image build only works over plain HTTP | Last resort for broken TLS: `APK_USE_HTTP=1` in `.env`. Prefer fixing step 3 |
 | Container exits at start, `kinit` fails | Wrong user, realm or password. Check `.env`, `data/conf/krb5.conf`, `data/secrets/ad_pass`; `docker compose logs cntlm` shows the error. Realm names are upper case |
 | `407 Proxy Authentication Required` through the proxy | The ticket is missing or expired, or the parent proxy needs another method. Restart (`docker compose restart cntlm`), then check `Proxy` in `data/conf/cntlm.conf` |
