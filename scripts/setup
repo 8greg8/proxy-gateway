@@ -91,18 +91,36 @@ ask PARENT_PROXY "Corporate proxy host:port (several: comma separated)" "$cur_pa
 IFS=',' read -r -a parents <<<"$PARENT_PROXY"
 for p in "${parents[@]}"; do valid '^[A-Za-z0-9._-]+:[0-9]{1,5}$' "${p// /}"; done
 
-def_np="localhost,127.0.0.1,::1,.local"
+def_np="localhost,127.0.0.1,::1,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 cur_np="$(sed -n 's/^NO_PROXY=//p' /etc/proxy.conf 2>/dev/null | head -1 || true)"
 [[ "$cur_np" =~ ^[A-Za-z0-9._*:/,-]+$ ]] || cur_np=""   # ignore an old file that update-proxy cannot parse
 ask NO_PROXY_LIST "Hosts that bypass the proxy (comma separated)" "${cur_np:-$def_np}"
 valid '^[A-Za-z0-9._*:/,-]+$' "$NO_PROXY_LIST"
+
+# One bypass list serves both places. Cntlm only knows wildcards, so CIDR ranges and ".domain" suffixes
+# are translated for data/conf/cntlm.conf; /etc/proxy.conf keeps the list as entered.
+to_cntlm() {
+  local out=() e
+  IFS=',' read -r -a items <<<"$1"
+  for e in "${items[@]}"; do
+    case "$e" in
+      10.0.0.0/8) out+=("10.*") ;;
+      192.168.0.0/16) out+=("192.168.*") ;;
+      172.16.0.0/12) for i in $(seq 16 31); do out+=("172.$i.*"); done ;;
+      127.0.0.1) out+=("127.0.0.*") ;;
+      .*) out+=("*$e") ;;
+      *) out+=("$e") ;;
+    esac
+  done
+  local IFS=','; printf '%s' "${out[*]}" | sed 's/,/, /g'
+}
 
 # cntlm.conf: replace Proxy and NoProxy lines, keep the rest
 tmp="$(mktemp)"
 {
   grep -v -E '^(Proxy|NoProxy)[[:space:]]' data/conf/cntlm.conf
   for p in "${parents[@]}"; do printf 'Proxy\t\t%s\n' "${p// /}"; done
-  printf 'NoProxy\t\t%s\n' "${NO_PROXY_LIST//,/, }"
+  printf 'NoProxy\t\t%s\n' "$(to_cntlm "$NO_PROXY_LIST")"
 } >"$tmp"
 cat "$tmp" >data/conf/cntlm.conf; rm -f "$tmp"
 

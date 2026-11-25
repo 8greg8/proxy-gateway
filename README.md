@@ -123,7 +123,7 @@ container to the `cntlm-net` network and set `HTTPS_PROXY=http://cntlm:3128` (co
 | Step | Question | What the script does with it |
 |---|---|---|
 | **1. Account** | Active Directory user name, Kerberos realm (for example `EXAMPLE.COM`), password (typed hidden) | Writes `.env`, `data/conf/krb5.conf` (domain controllers found through DNS) and `data/secrets/ad_pass` (mode `0600`) |
-| **2. Proxy** | Corporate proxy `host:port` (several: comma separated), hosts that bypass the proxy | Writes `data/conf/cntlm.conf`, then `/etc/proxy.conf`, then applies it to this machine with `sudo ./scripts/update-proxy` |
+| **2. Proxy** | Corporate proxy `host:port` (several: comma separated), hosts that bypass the proxy (one list: names, `.domain` suffixes, IPs and CIDR ranges; it is translated to Cntlm wildcards for you) | Writes `data/conf/cntlm.conf`, then `/etc/proxy.conf`, then applies it to this machine with `sudo ./scripts/update-proxy` |
 | **3. Root CA** | Any HTTPS site you reach through the proxy (empty = skip) | Fetches its certificate chain with `openssl s_client`, shows subject, issuer and SHA-256 of each certificate, and after your confirmation saves the root to `cntlm-gss/certs/<site>.crt` |
 
 Notes:
