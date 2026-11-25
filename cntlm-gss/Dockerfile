@@ -56,6 +56,7 @@ WORKDIR $PROJECT
 # Install tools required for the project
 # Build cntlm with kerberos enabled
 RUN set -eux; \
+    for c in /usr/local/share/ca-certificates/*.crt; do [ -f "$c" ] && cat "$c" >> /etc/ssl/certs/ca-certificates.crt; done; \
     if [ "$APK_USE_HTTP" = "1" ]; then sed -i 's/https/http/g' /etc/apk/repositories; fi; \
     apk update; \
 # update certificates

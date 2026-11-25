@@ -24,7 +24,7 @@ identical to the one here) is missing.
 
 | File | When | Change |
 |---|---|---|
-| `Dockerfile` | 2023-04-26 to 2025-12-05, 2026-11-25 | Rewritten for a small Alpine-based image, Cntlm built with Kerberos, keytab creation and ticket renewal, `conf/` and `certs/` copied in. On 2026-11-25 the switch of the Alpine package repositories to HTTP was made opt-in (`APK_USE_HTTP=1`) |
+| `Dockerfile` | 2023-04-26 to 2025-12-05, 2026-11-25 | Rewritten for a small Alpine-based image, Cntlm built with Kerberos, keytab creation and ticket renewal, `conf/` and `certs/` copied in. On 2026-11-25 the switch of the Alpine package repositories to HTTP was made opt-in (`APK_USE_HTTP=1`), and the custom certificates are added to the trust store before the first `apk` call |
 | `README.md` | 2023-04-26 to 2023-05-22, 2026-11-25 | Adapted; on 2026-11-25 a note pointing to the root README was added |
 | `.gitignore` | 2023-04-26 to 2023-05-22 | Ignore local configs, logs, certificates and archives |
 

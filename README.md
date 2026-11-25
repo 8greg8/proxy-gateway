@@ -24,30 +24,44 @@ Corporate proxies that need Windows (NTLM) or Kerberos authentication do not wor
 |---|---|---|
 | `compose.yml`, `.env.example` | Runs the proxy container, bound to `127.0.0.1` | Apache-2.0 |
 | `scripts/update-proxy`, `etc/proxy.conf.example`, `systemd/` | Renders host proxy settings from `/etc/proxy.conf` | Apache-2.0 |
-| `scripts/init`, `config/*.example` | Creates the per-host files from templates | Apache-2.0 |
+| `scripts/setup`, `scripts/init`, `config/*.example` | Guided setup (account, proxy, root CA) and the per-host templates | Apache-2.0 |
 | `tests/` | Sandbox tests for `update-proxy` (no root needed) | Apache-2.0 |
 | `cntlm-gss/` | The Cntlm fork with Kerberos support and its Docker build | GPL-2.0-or-later |
 | `data/` | Per-host files (git-ignored): configs and the password file | n/a |
 
 ## Quick start
 
-Requirements: Docker with Compose, `bash`, and a directory (Active Directory or Kerberos) account.
+Requirements: Docker with Compose, `bash`, `openssl`, `sudo`, and a directory (Active Directory or Kerberos) account.
 
 ```bash
 git clone https://github.com/8greg8/proxy-gateway.git && cd proxy-gateway
-scripts/init                      # creates .env, data/conf/*, data/secrets/ad_pass, the cntlm-net network
-$EDITOR .env data/conf/cntlm.conf data/conf/krb5.conf
-printf '%s\n' 'your-password' > data/secrets/ad_pass   # keep mode 0600
+scripts/setup                  # three steps, about two minutes
 docker compose up -d --build
-curl -x http://localhost:3128 https://example.com -I    # should answer through the corporate proxy
+curl -sI -x http://localhost:3128 https://example.com | head -1     # answers through the corporate proxy
 ```
 
-Behind a network that inspects TLS, copy its root CA (`.crt`) into `cntlm-gss/certs/` before building.
+`scripts/setup` asks for:
+
+1. **Your account**: directory user name, Kerberos realm and password. The password is typed hidden and stored in
+   `data/secrets/ad_pass` (mode `0600`). Domain controllers are found through DNS.
+2. **Your proxy**: the corporate proxy (`host:port`) and the hosts that bypass it. It writes `data/conf/cntlm.conf`, then
+   `/etc/proxy.conf`, and applies the settings to this host with `sudo scripts/update-proxy`.
+3. **Your root CA**: if your network inspects TLS, name any HTTPS site you reach through the proxy. The script fetches its
+   certificate chain with `openssl s_client`, shows subject, issuer and SHA-256 fingerprint of each certificate, and
+   after your confirmation saves the last one to `cntlm-gss/certs/<site>.crt`. It is trust-on-first-use, so compare the
+   fingerprint with the one your IT department publishes. By hand this is
+   `openssl s_client -connect SITE:443 -showcerts </dev/null | sed -e '/-----BEGIN/,/-----END/!d'`.
+
+Re-run it any time; current values are offered as defaults. Options: `--yes` (take defaults or `SETUP_*` variables),
+`--skip-ca`, `--skip-host` (no sudo). Without a TLS-inspecting network, answer the third question with an empty line.
+
+If the image build cannot reach the internet directly, set `BUILD_PROXY` (and `BUILD_NETWORK=host` when that proxy runs
+on this machine) in `.env`. `scripts/init` alone only creates the files from the templates.
 
 ### One file for all host settings
 
 ```bash
-sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf
+sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf   # scripts/setup does this for you
 sudoedit /etc/proxy.conf          # proxy host and port, NO_PROXY list
 sudo scripts/update-proxy --dry-run   # show what would change
 sudo scripts/update-proxy             # write the files

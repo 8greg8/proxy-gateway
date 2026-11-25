@@ -16,6 +16,7 @@ First public state of the monorepo. It combines the former `cntlm-gss` fork and 
 - `compose.yml` and `.env.example`: run the Cntlm container bound to `127.0.0.1`, built from `cntlm-gss/`.
 - `scripts/update-proxy`: renders shell, `/etc/environment`, apt, Docker daemon and git proxy settings from `/etc/proxy.conf`,
   with `--dry-run`, `--check`, `--off` and `--apply-services`. Sandbox tests in `tests/`.
+- `scripts/setup`: guided three-step setup (account and password, proxy and bypass list, root CA fetched with `openssl s_client`).
 - `scripts/init`: creates the per-host files from `*.example` templates and the `cntlm-net` network without overwriting anything.
 - `systemd/update-proxy.service`, `scripts/check-build-proxy.sh`, `scripts/check-license-headers.sh`.
 - Documentation and community files: README with acknowledgments and GPL compliance notes, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT
@@ -23,6 +24,7 @@ First public state of the monorepo. It combines the former `cntlm-gss` fork and 
 
 ### Changed
 
+- `cntlm-gss/Dockerfile`: certificates in `certs/` are trusted before the first `apk` call, so builds behind a TLS-inspecting proxy work without the HTTP downgrade.
 - `cntlm-gss/Dockerfile`: the switch of the Alpine package repositories to HTTP is now opt-in (`APK_USE_HTTP=1`); it was always on.
 - Example IP addresses in the Cntlm documentation replaced with example host names and documentation addresses.
 

@@ -9,6 +9,10 @@ services:
       args:
         VERSION: ${ALPINE_VERSION:-3.17}
         APK_USE_HTTP: ${APK_USE_HTTP:-0}
+        HTTP_PROXY: ${BUILD_PROXY:-}
+        HTTPS_PROXY: ${BUILD_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-}
+      network: ${BUILD_NETWORK:-default}
     image: proxy-gateway/cntlm-gss:local
     container_name: cntlm-gss
     environment:

@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 Gregor Koporec
+#
+# One command, three steps:
+#   1. your account    directory user name and password (Kerberos realm)
+#   2. your proxy      parent proxy, hosts that bypass it, host settings (/etc/proxy.conf)
+#   3. your root CA    fetch the certificate chain of a TLS-inspected site (needs openssl)
+# Re-run it any time; existing answers are offered as defaults and nothing is overwritten silently.
+#
+# Usage: scripts/setup [--yes] [--skip-ca] [--skip-host]
+#   --yes        take the defaults, or the values given in SETUP_* environment variables
+#   --skip-ca    do not fetch a certificate
+#   --skip-host  do not write /etc/proxy.conf (no sudo needed)
+# Non-interactive values: SETUP_AD_USER SETUP_REALM SETUP_PARENT_PROXY SETUP_NO_PROXY
+#   SETUP_CA_HOST SETUP_CA_YES=1; the password is read from SETUP_PASSWORD_FILE if set.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+YES=0 SKIP_CA=0 SKIP_HOST=0
+for a in "$@"; do
+  case "$a" in
+    --yes) YES=1 ;; --skip-ca) SKIP_CA=1 ;; --skip-host) SKIP_HOST=1 ;;
+    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $a" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf '\n== %s\n' "$*"; }
+# ask VAR "prompt" "default": use $SETUP_VAR if set, the default with --yes, else prompt.
+ask() {
+  local var="$1" prompt="$2" def="${3:-}" env="SETUP_$1" val=""
+  if [[ -n "${!env:-}" ]]; then val="${!env}"
+  elif [[ $YES -eq 1 ]]; then val="$def"
+  else read -r -p "$prompt${def:+ [$def]}: " val; val="${val:-$def}"; fi
+  printf -v "$var" '%s' "$val"
+}
+# set_kv FILE KEY VALUE: replace KEY=... or append it (value is never evaluated)
+set_kv() {
+  local f="$1" k="$2" v="$3" tmp
+  tmp="$(mktemp)"
+  awk -v k="$k" -v v="$v" 'BEGIN{d=0} $0 ~ "^"k"=" {print k"="v; d=1; next} {print} END{if(!d) print k"="v}' "$f" >"$tmp"
+  cat "$tmp" >"$f"; rm -f "$tmp"
+}
+valid() { [[ "$2" =~ $1 ]] || { echo "invalid value: $2" >&2; exit 2; }; }
+
+scripts/init --no-network >/dev/null
+
+# ---------------------------------------------------------------- 1. account
+say "Step 1/3: your account"
+cur_user="$(sed -n 's/^AD_USER=//p' .env 2>/dev/null | head -1)"; [[ "$cur_user" == "your-ad-user" ]] && cur_user=""
+ask AD_USER "Directory user name (without realm)" "$cur_user"
+[[ -n "$AD_USER" ]] || { echo "a user name is required" >&2; exit 2; }
+valid '^[A-Za-z0-9._-]+$' "$AD_USER"
+set_kv .env AD_USER "$AD_USER"
+
+cur_realm="$(sed -n 's/^[[:space:]]*default_realm *= *//p' data/conf/krb5.conf | head -1)"
+ask REALM "Kerberos realm (upper case, e.g. EXAMPLE.COM)" "$cur_realm"
+REALM="$(printf '%s' "$REALM" | tr '[:lower:]' '[:upper:]')"
+valid '^[A-Z0-9.-]+$' "$REALM"
+if [[ "$REALM" != "$cur_realm" ]]; then
+  dom="$(printf '%s' "$REALM" | tr '[:upper:]' '[:lower:]')"
+  # Realm and domain are replaced; the domain controllers are found through DNS (dns_lookup_kdc).
+  sed -e "s/EXAMPLE\.COM/$REALM/g" -e "s/example\.com/$dom/g" \
+      -e '/^[[:space:]]*kdc *=/d' -e '/^[[:space:]]*admin_server *=/d' \
+      -e 's/^\[libdefaults\]/[libdefaults]\n\tdns_lookup_kdc = true\n\tdns_lookup_realm = true/' \
+      config/krb5.conf.example >data/conf/krb5.conf
+  echo "wrote data/conf/krb5.conf (domain controllers via DNS; add 'kdc = host' lines if you need to pin them)"
+fi
+
+pw_file=data/secrets/ad_pass
+if [[ -n "${SETUP_PASSWORD_FILE:-}" ]]; then
+  install -m 0600 "$SETUP_PASSWORD_FILE" "$pw_file"; echo "password file installed (data/secrets/ad_pass)"
+elif [[ -s $pw_file && $YES -eq 1 ]]; then
+  echo "keep data/secrets/ad_pass"
+elif [[ $YES -eq 0 ]]; then
+  if [[ -s $pw_file ]]; then read -r -p "Password already stored. Replace it? [y/N]: " r; [[ "$r" =~ ^[Yy] ]] || r=n; else r=y; fi
+  if [[ "$r" =~ ^[Yy] ]]; then
+    read -rs -p "Directory password (not shown): " pw; echo
+    [[ -n "$pw" ]] || { echo "empty password" >&2; exit 2; }
+    ( umask 077; printf '%s\n' "$pw" >"$pw_file" ); unset pw
+    echo "stored in data/secrets/ad_pass (mode 0600)"
+  fi
+fi
+chmod 600 "$pw_file"
+
+# ---------------------------------------------------------------- 2. proxy
+say "Step 2/3: your proxy"
+cur_parent="$(sed -n 's/^Proxy[[:space:]]\+//p' data/conf/cntlm.conf | head -1)"
+[[ "$cur_parent" == proxy1.example.com:* ]] && cur_parent=""
+ask PARENT_PROXY "Corporate proxy host:port (several: comma separated)" "$cur_parent"
+[[ -n "$PARENT_PROXY" ]] || { echo "a corporate proxy is required" >&2; exit 2; }
+IFS=',' read -r -a parents <<<"$PARENT_PROXY"
+for p in "${parents[@]}"; do valid '^[A-Za-z0-9._-]+:[0-9]{1,5}$' "${p// /}"; done
+
+def_np="localhost,127.0.0.1,::1,.local"
+cur_np="$(sed -n 's/^NO_PROXY=//p' /etc/proxy.conf 2>/dev/null | head -1 || true)"
+ask NO_PROXY_LIST "Hosts that bypass the proxy (comma separated)" "${cur_np:-$def_np}"
+valid '^[A-Za-z0-9._*:/,-]+$' "$NO_PROXY_LIST"
+
+# cntlm.conf: replace Proxy and NoProxy lines, keep the rest
+tmp="$(mktemp)"
+{
+  grep -v -E '^(Proxy|NoProxy)[[:space:]]' data/conf/cntlm.conf
+  for p in "${parents[@]}"; do printf 'Proxy\t\t%s\n' "${p// /}"; done
+  printf 'NoProxy\t\t%s\n' "${NO_PROXY_LIST//,/, }"
+} >"$tmp"
+cat "$tmp" >data/conf/cntlm.conf; rm -f "$tmp"
+echo "wrote data/conf/cntlm.conf (Proxy, NoProxy)"
+
+if [[ $SKIP_HOST -eq 0 ]]; then
+  stage="$(mktemp)"
+  if [[ -r /etc/proxy.conf ]]; then cat /etc/proxy.conf >"$stage"; else cat etc/proxy.conf.example >"$stage"; fi
+  set_kv "$stage" NO_PROXY "$NO_PROXY_LIST"
+  if [[ $YES -eq 0 ]]; then read -r -p "Write /etc/proxy.conf and apply it to this host with sudo? [Y/n]: " r; else r=y; fi
+  if [[ ! "$r" =~ ^[Nn] ]]; then
+    sudo install -m 0644 "$stage" /etc/proxy.conf
+    sudo scripts/update-proxy
+  else
+    echo "skipped; later: sudo install -m 0644 etc/proxy.conf.example /etc/proxy.conf && sudo scripts/update-proxy"
+  fi
+  rm -f "$stage"
+fi
+
+# ---------------------------------------------------------------- 3. root CA
+if [[ $SKIP_CA -eq 0 ]]; then
+  say "Step 3/3: your root CA"
+  echo "If your network inspects TLS, the image build fails with 'certificate verify failed'."
+  echo "Name any HTTPS site that you reach through the proxy; its certificate chain is fetched with openssl."
+  ask CA_HOST "Site to fetch the chain from (empty = skip)" ""
+  if [[ -n "$CA_HOST" ]]; then
+    valid '^[A-Za-z0-9.-]+$' "$CA_HOST"
+    command -v openssl >/dev/null || { echo "openssl is not installed" >&2; exit 1; }
+    work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+    px=()
+    if [[ -n "${https_proxy:-${HTTPS_PROXY:-}}" ]]; then
+      hp="${https_proxy:-$HTTPS_PROXY}"; hp="${hp#*://}"; hp="${hp%%/*}"; hp="${hp##*@}"; px=(-proxy "$hp")
+    fi
+    openssl s_client "${px[@]}" -connect "$CA_HOST:443" -servername "$CA_HOST" -showcerts </dev/null 2>/dev/null \
+      | awk '/^Server certificate/{exit} {print}' | sed -e '/-----BEGIN/,/-----END/!d' >"$work/all.pem" || true
+    [[ -s "$work/all.pem" ]] || { echo "could not fetch a chain from $CA_HOST:443" >&2; exit 1; }
+    awk -v d="$work" '/-----BEGIN/{n++} {print > sprintf("%s/c%02d.pem", d, n)}' "$work/all.pem"
+    echo "Certificates presented by $CA_HOST (first = the site, last = the issuing top):"
+    i=0
+    for c in "$work"/c*.pem; do
+      i=$((i+1))
+      echo "  [$i] $(openssl x509 -in "$c" -noout -subject | sed 's/^subject= *//')"
+      echo "      issuer: $(openssl x509 -in "$c" -noout -issuer | sed 's/^issuer= *//')"
+      echo "      sha256: $(openssl x509 -in "$c" -noout -fingerprint -sha256 | sed 's/.*=//')"
+    done
+    echo "This is trust-on-first-use: compare the fingerprint of the last certificate with the one your IT department publishes."
+    last="$(ls "$work"/c*.pem | tail -1)"
+    if [[ "${SETUP_CA_YES:-0}" == 1 || $YES -eq 1 ]]; then r=y
+    else read -r -p "Trust the last certificate [$i] for the image build? [y/N]: " r; fi
+    if [[ "$r" =~ ^[Yy] ]]; then
+      install -m 0644 "$last" "cntlm-gss/certs/$CA_HOST.crt"
+      echo "wrote cntlm-gss/certs/$CA_HOST.crt (git-ignored; used only while building the image)"
+    else
+      echo "nothing written"
+    fi
+  fi
+fi
+
+say "Done"
+echo "Start it:   docker compose up -d --build"
+echo "Check it:   curl -sI -x http://localhost:$(sed -n 's/^PROXY_PORT=//p' .env | head -1) https://example.com | head -1"
