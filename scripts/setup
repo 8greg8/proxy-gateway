@@ -149,8 +149,19 @@ if [[ $SKIP_CA -eq 0 ]]; then
       echo "      issuer: $(openssl x509 -in "$c" -noout -issuer | sed 's/^issuer= *//')"
       echo "      sha256: $(openssl x509 -in "$c" -noout -fingerprint -sha256 | sed 's/.*=//')"
     done
-    echo "This is trust-on-first-use: compare the fingerprint of the last certificate with the one your IT department publishes."
     last="$(ls "$work"/c*.pem | tail -1)"
+    # Many proxies send only the site and the intermediate certificate. Walk up to the self-signed root
+    # in this machine's trust store (hash-named links, as created by update-ca-certificates).
+    for _ in 1 2 3 4 5; do
+      [[ "$(openssl x509 -in "$last" -noout -subject_hash)" == "$(openssl x509 -in "$last" -noout -issuer_hash)" ]] && break
+      ih="$(openssl x509 -in "$last" -noout -issuer_hash)"; found=""
+      for d in /etc/ssl/certs /etc/pki/tls/certs; do [[ -r "$d/$ih.0" ]] && { found="$d/$ih.0"; break; }; done
+      [[ -n "$found" ]] || { echo "  the issuing root is not presented and not in this machine's trust store: saving the last certificate presented"; break; }
+      i=$((i+1)); cp "$found" "$work/c$(printf '%02d' $i).pem"; last="$work/c$(printf '%02d' $i).pem"
+      echo "  [$i] (from this machine's trust store) $(openssl x509 -in "$last" -noout -subject | sed 's/^subject= *//')"
+      echo "      sha256: $(openssl x509 -in "$last" -noout -fingerprint -sha256 | sed 's/.*=//')"
+    done
+    echo "This is trust-on-first-use: compare the fingerprint of the last certificate with the one your IT department publishes."
     if [[ "${SETUP_CA_YES:-0}" == 1 || $YES -eq 1 ]]; then r=y
     else read -r -p "Trust the last certificate [$i] for the image build? [y/N]: " r; fi
     if [[ "$r" =~ ^[Yy] ]]; then
