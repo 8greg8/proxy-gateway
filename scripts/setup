@@ -95,6 +95,7 @@ for p in "${parents[@]}"; do valid '^[A-Za-z0-9._-]+:[0-9]{1,5}$' "${p// /}"; do
 
 def_np="localhost,127.0.0.1,::1,.local"
 cur_np="$(sed -n 's/^NO_PROXY=//p' /etc/proxy.conf 2>/dev/null | head -1 || true)"
+[[ "$cur_np" =~ ^[A-Za-z0-9._*:/,-]+$ ]] || cur_np=""   # ignore an old file that update-proxy cannot parse
 ask NO_PROXY_LIST "Hosts that bypass the proxy (comma separated)" "${cur_np:-$def_np}"
 valid '^[A-Za-z0-9._*:/,-]+$' "$NO_PROXY_LIST"
 
