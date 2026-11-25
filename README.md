@@ -1,29 +1,106 @@
 # proxy-gateway
 
 [![CI](https://github.com/8greg8/proxy-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/8greg8/proxy-gateway/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/License-Apache%202.0%20%2F%20GPL--2.0--or--later-blue.svg)](#license)
 
-A local proxy for machines and containers behind a corporate NTLM or Kerberos proxy, packaged for Docker, plus one small
-tool that keeps every proxy setting on the host in sync from a single file.
+A local proxy for machines and containers behind a corporate NTLM or Kerberos proxy, packaged for Docker, with one
+file that keeps every proxy setting on the host in sync.
 
-## What it does
+Sign in once with your directory account. `git`, `apt`, `pip`, `npm`, `curl` and Docker image pulls then work
+through the corporate proxy without a password in any of them.
 
-Corporate proxies that require Windows (NTLM) or Kerberos sign-in do not work with most developer tools: `git`, `apt`,
-`pip`, `npm`, `curl` and Docker image pulls fail with `407 Proxy Authentication Required`. proxy-gateway runs
-[Cntlm](http://cntlm.sourceforge.net) with Kerberos support in a Docker container on your machine. Your tools talk to a
-plain local proxy without a password, and Cntlm signs in to the corporate proxy for them.
+> **Note:** This is an independent, community-maintained packaging of [Cntlm](http://cntlm.sourceforge.net) with
+> Kerberos support. It is not affiliated with or endorsed by the Cntlm project or any proxy vendor.
+
+---
+
+## Why proxy-gateway?
+
+### Without it
+
+- ❌ Most developer tools cannot sign in to NTLM or Kerberos proxies and fail with `407 Proxy Authentication Required`.
+- ❌ Passwords end up in `~/.gitconfig`, shell profiles, `apt` configuration and Docker daemon files, and go stale after every password change.
+- ❌ The same proxy address and bypass list is copied by hand into five or more places, and they drift apart.
+- ❌ Upstream Cntlm has no Kerberos support: the patch exists only as an attachment in a discussion thread, and there is no ready-made container build.
+- ❌ Behind a TLS-inspecting proxy, image builds fail with `certificate verify failed` and there is no guided way to trust the company root CA.
+- ❌ A shared, always-on proxy for several machines or containers means hand-writing compose files, networks and ticket renewal.
+
+### With it
+
+- ✅ One local proxy (`http://localhost:3128`) that signs in for your tools using a Kerberos ticket, renewed automatically every five hours.
+- ✅ The password lives in exactly one file, `data/secrets/ad_pass` (mode `0600`), mounted read-only into one container. No tool ever sees it.
+- ✅ One file, `/etc/proxy.conf`, is the single source of truth. `update-proxy` derives shell, `apt`, Docker daemon and `git` settings from it, with `--dry-run`, `--check` and `--off`.
+- ✅ Kerberos out of the box: Cntlm 0.92.3 with the GSSAPI patch, built from source in a small Alpine image.
+- ✅ `scripts/setup` asks three groups of questions (account, proxy, root CA) and fetches and verifies the root certificate for you.
+- ✅ Safe defaults: the port is bound to `127.0.0.1`, per-host files are git-ignored, and CI scans the whole history for secrets.
+- ✅ Containers on the `cntlm-net` network reach the same proxy by name.
+
+---
+
+## Overview
+
+proxy-gateway combines a Docker build of Cntlm with Kerberos support and a small set of shell scripts. The container
+listens on the local machine, signs in to the corporate proxy with a Kerberos ticket for your account, and forwards
+requests from tools that cannot authenticate themselves. The scripts create all per-host configuration from templates
+and keep the machine's proxy settings consistent.
 
 ```text
  your tools and containers  -->  proxy-gateway (Cntlm, Docker)  -->  corporate proxy  -->  internet
    plain http://localhost:3128      Kerberos sign-in with your account      authenticated
 ```
 
-It consists of two independent parts:
+---
 
-| Part | Purpose | Where |
-|---|---|---|
-| **Proxy container** | The local proxy that signs in for you | `compose.yml`, `cntlm-gss/`, `data/` |
-| **Host settings** | Points the tools on this machine at the proxy, from one file (`/etc/proxy.conf`) | `scripts/update-proxy` |
+## Functionalities
+
+### Proxy container
+
+| Feature | Detail |
+|---|---|
+| Authentication | Kerberos (GSSAPI); the container turns `data/secrets/ad_pass` into a ticket and renews it every five hours |
+| Network | Port bound to `127.0.0.1`; other containers join the `cntlm-net` network and use `http://cntlm:3128` |
+| Configuration | `data/conf/cntlm.conf` (parent proxies, bypass list), `data/conf/krb5.conf` (realm), all read-only |
+| TLS inspection | Corporate root certificates in `cntlm-gss/certs/` are trusted during the image build |
+
+### Guided setup: `scripts/setup`
+
+| Step | Does |
+|---|---|
+| 1. Account | Directory user, Kerberos realm, hidden password prompt |
+| 2. Proxy | Corporate proxy and bypass list, then writes and applies `/etc/proxy.conf` |
+| 3. Root CA | Fetches a certificate chain with `openssl`, shows fingerprints, saves the root after your confirmation |
+
+### Host settings: `scripts/update-proxy`
+
+Writes `/etc/profile.d/proxy.sh`, a managed block in `/etc/environment`, the `apt` configuration, a Docker daemon
+drop-in and `/etc/gitconfig` from `/etc/proxy.conf`. It never reads the password file and never touches
+`~/.docker/config.json`. Details are in [Host settings](#host-settings-etcproxyconf-and-update-proxy).
+
+---
+
+## Repository structure
+
+```text
+proxy-gateway/
+├── compose.yml, .env.example        # proxy container, bound to 127.0.0.1          (Apache-2.0)
+├── scripts/
+│   ├── setup, init                  # guided setup and per-host templates          (Apache-2.0)
+│   └── update-proxy                 # host settings from /etc/proxy.conf           (Apache-2.0)
+├── config/, etc/, systemd/          # templates and the boot-time unit             (Apache-2.0)
+├── tests/                           # sandbox tests for update-proxy               (Apache-2.0)
+├── data/                            # per-host files, git-ignored                  (n/a)
+└── cntlm-gss/                       # Cntlm fork with Kerberos and its Docker build (GPL-2.0-or-later)
+```
+
+## Tech stack
+
+- **Runtime:** Docker, Docker Compose, Alpine Linux
+- **Proxy:** Cntlm 0.92.3 with the Kerberos (GSSAPI) patch, MIT Kerberos client
+- **Tooling:** `bash`, `openssl`, `systemd`
+- **Quality:** ShellCheck, sandbox tests, betterleaks secret scan, GitHub Actions
+
+---
 
 ## Quick start
 
@@ -68,6 +145,8 @@ Notes:
 | `SETUP_AD_USER`, `SETUP_REALM`, `SETUP_PARENT_PROXY`, `SETUP_NO_PROXY_LIST`, `SETUP_CA_HOST`, `SETUP_CA_YES=1` | Answers for unattended runs |
 | `SETUP_PASSWORD_FILE` | A file whose content becomes `data/secrets/ad_pass` |
 | `scripts/init` | Only creates the per-host files from the templates; `setup` calls it for you |
+
+---
 
 ## Host settings: `/etc/proxy.conf` and `update-proxy`
 
@@ -114,6 +193,8 @@ sudo install -m 0644 systemd/update-proxy.service /etc/systemd/system/
 sudo systemctl enable update-proxy
 ```
 
+---
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -129,18 +210,9 @@ sudo systemctl enable update-proxy
 | A site must not use the proxy | Add it to the bypass list in `data/conf/cntlm.conf` (`NoProxy`) and to `NO_PROXY` in `/etc/proxy.conf`, then restart and re-apply |
 | Reporting a problem | Remove credentials, host names and IP addresses from logs first, see [CONTRIBUTING.md](CONTRIBUTING.md) |
 
-## Repository layout
-
-| Path | What | License |
-|---|---|---|
-| `compose.yml`, `.env.example` | Runs the proxy container, bound to `127.0.0.1` | Apache-2.0 |
-| `scripts/setup`, `scripts/init`, `config/*.example` | Guided setup and the per-host templates | Apache-2.0 |
-| `scripts/update-proxy`, `etc/proxy.conf.example`, `systemd/` | Host settings from `/etc/proxy.conf` | Apache-2.0 |
-| `tests/` | Sandbox tests for `update-proxy` (no root needed) | Apache-2.0 |
-| `cntlm-gss/` | The Cntlm fork with Kerberos support and its Docker build | GPL-2.0-or-later |
-| `data/` | Per-host files (git-ignored): configs and the password file | n/a |
-
 Developers: checks, tests and conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
 
 ## Acknowledgments and derivations
 
@@ -183,18 +255,26 @@ Against <https://github.com/maksteel/cntlm-gss-docker> (details and dates in `cn
   documentation addresses, leftover patch backups (`*.orig`) and editor files were removed.
 - Everything at the root is new: compose file, `update-proxy`, `scripts/init`, config templates, tests, CI and the docs.
 
+---
+
 ## Roadmap
 
 No fixed roadmap yet. Ideas and requests are welcome as issues or discussions.
+
+---
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+---
+
 ## Security
 
 Please report vulnerabilities privately, see [SECURITY.md](SECURITY.md). Never put real credentials, host names or IP
 addresses in issues or pull requests.
+
+---
 
 ## License
 
